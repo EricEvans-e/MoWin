@@ -16,6 +16,7 @@ class AppController {
 
     this.initDOM();
     this.initComponents();
+    this.initDividerDrag();
     this.initMenuListener();
     this.loadInitialFile();
   }
@@ -27,12 +28,14 @@ class AppController {
     this.paneDivider = document.getElementById('pane-divider');
     this.titleDisplay = document.getElementById('document-title-display');
     this.statusBar = document.getElementById('status-bar');
+    this.themeBtn = document.getElementById('btn-toolbar-theme');
+    this.saveBtn = document.getElementById('btn-toolbar-save');
 
-    // 工具栏按钮
+    // 工具栏按钮绑定
     document.getElementById('btn-sidebar-toggle').addEventListener('click', () => this.sidebar.toggle());
     document.getElementById('btn-toolbar-open').addEventListener('click', () => this.openFile());
-    document.getElementById('btn-toolbar-save').addEventListener('click', () => this.saveFile());
-    document.getElementById('btn-toolbar-theme').addEventListener('click', () => this.cycleTheme());
+    this.saveBtn.addEventListener('click', () => this.saveFile());
+    this.themeBtn.addEventListener('click', () => this.cycleTheme());
 
     // 视图模式分段按钮
     document.getElementById('mode-btn-edit').addEventListener('click', () => this.setMode('edit'));
@@ -51,7 +54,12 @@ class AppController {
         e.preventDefault();
         if (a.hash && a.hash.startsWith('#heading-')) {
           const el = document.querySelector(a.hash);
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          if (el) {
+            const containerRect = this.previewContainer.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            const targetTop = (elRect.top - containerRect.top) + this.previewContainer.scrollTop - 24;
+            this.previewContainer.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+          }
         } else {
           window.mowinAPI.openExternal(a.href);
         }
@@ -62,6 +70,13 @@ class AppController {
     window.addEventListener('resize', () => {
       if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
     });
+
+    window.invalidateSourceBlocks = () => {
+      if (this.scrollSync) this.scrollSync.invalidateSourceBlocks();
+    };
+    window.scrollToLine = (line) => {
+      if (this.scrollSync) this.scrollSync.scrollToPreviewLine(line);
+    };
   }
 
   initComponents() {
@@ -81,6 +96,40 @@ class AppController {
     // 加载保存的主题
     const savedTheme = localStorage.getItem('mowin_theme') || 'system';
     this.setTheme(savedTheme);
+  }
+
+  // 实现左右分栏拖拽调整宽度
+  initDividerDrag() {
+    let isDragging = false;
+    this.paneDivider.addEventListener('mousedown', (e) => {
+      if (this.mode !== 'split') return;
+      isDragging = true;
+      this.paneDivider.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const splitRect = document.getElementById('content-split').getBoundingClientRect();
+      const offset = e.clientX - splitRect.left;
+      const minWidth = 240;
+      const maxWidth = splitRect.width - minWidth;
+      if (offset >= minWidth && offset <= maxWidth) {
+        this.editorContainer.style.flex = 'none';
+        this.editorContainer.style.width = `${offset}px`;
+        this.previewContainer.style.flex = '1';
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        this.paneDivider.classList.remove('resizing');
+        document.body.style.cursor = 'default';
+        if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+      }
+    });
   }
 
   async loadInitialFile() {
@@ -253,13 +302,16 @@ class AppController {
   scrollToHeading(index) {
     const el = document.getElementById(`heading-${index}`);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const containerRect = this.previewContainer.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const targetTop = (elRect.top - containerRect.top) + this.previewContainer.scrollTop - 24;
+      this.previewContainer.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
     }
   }
 
   syncPreviewToLine(linePos) {
-    if (window.scrollToLine) {
-      window.scrollToLine(linePos);
+    if (this.scrollSync) {
+      this.scrollSync.scrollToPreviewLine(linePos);
     }
   }
 
@@ -272,19 +324,26 @@ class AppController {
       this.editorContainer.classList.remove('hidden');
       this.previewContainer.classList.add('hidden');
       this.paneDivider.style.display = 'none';
+      this.editorContainer.style.flex = '1';
+      this.editorContainer.style.width = 'auto';
       this.editor.textarea.focus();
     } else if (mode === 'read') {
       this.editorContainer.classList.add('hidden');
       this.previewContainer.classList.remove('hidden');
       this.paneDivider.style.display = 'none';
+      this.previewContainer.style.flex = '1';
     } else {
       // split
       this.editorContainer.classList.remove('hidden');
       this.previewContainer.classList.remove('hidden');
       this.paneDivider.style.display = 'block';
+      this.editorContainer.style.flex = '1';
+      this.editorContainer.style.width = 'auto';
+      this.previewContainer.style.flex = '1';
       this.editor.textarea.focus();
     }
     this.selectionPopover.hide();
+    if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
   }
 
   setTheme(theme) {
@@ -293,8 +352,12 @@ class AppController {
     document.body.classList.remove('light-theme', 'dark-theme');
     if (theme === 'light') {
       document.body.classList.add('light-theme');
+      this.themeBtn.title = '当前外观：浅色模式 (点击切换)';
     } else if (theme === 'dark') {
       document.body.classList.add('dark-theme');
+      this.themeBtn.title = '当前外观：深色模式 (点击切换)';
+    } else {
+      this.themeBtn.title = '当前外观：跟随系统 (点击切换)';
     }
   }
 
@@ -349,6 +412,13 @@ class AppController {
     if (res.success) {
       this.isModified = false;
       this.updateTitleAndStatus();
+
+      // 保存成功视觉反馈
+      const saveSpan = this.saveBtn.querySelector('span');
+      if (saveSpan) {
+        saveSpan.textContent = '已保存 ✓';
+        setTimeout(() => { saveSpan.textContent = '保存'; }, 1500);
+      }
     } else {
       alert('保存失败: ' + res.error);
     }

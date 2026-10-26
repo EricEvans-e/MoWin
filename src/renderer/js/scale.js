@@ -54,9 +54,11 @@ class DisplayScaleController {
     const gutter = this.app.editor.gutter;
 
     textarea.style.fontSize = `${currentSize}px`;
-    gutter.style.fontSize = `${currentSize * 0.88}px`;
+    gutter.style.fontSize = `${currentSize}px`;
+    gutter.style.lineHeight = '1.85';
+    textarea.style.lineHeight = '1.85';
 
-    // 重新校准行号高度
+    // 重新校准行号
     this.app.editor.updateGutter();
   }
 

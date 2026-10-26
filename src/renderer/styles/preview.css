@@ -1,14 +1,15 @@
 /* ==========================================================================
-   墨窗 (MoWin) - Markdown 排版与阅读样式
-   基于经典自然纸质感排版，针对中文正文与公式精心调优行高与留白
+   墨窗 (MoWin) - Markdown 深度排版与阅读样式
+   借鉴墨页原生设计规范，针对中文技术文稿、科学公式与中英混排精心调校
    ========================================================================== */
 
 #preview-viewport {
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
-  font-size: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  font-size: 16.5px;
   line-height: 1.85;
   overflow-wrap: anywhere;
+  letter-spacing: 0.15px;
 }
 
 #preview-viewport h1,
@@ -20,82 +21,104 @@
   line-height: 1.38;
   scroll-margin-top: 36px;
   font-weight: 650;
-  margin: 1.7em 0 .65em;
+  margin: 1.8em 0 0.7em;
   color: var(--text-primary);
+  letter-spacing: -0.2px;
 }
 
 #preview-viewport h1 {
-  font-size: 2em;
+  font-size: 1.95em;
   border-bottom: 1px solid var(--border);
-  padding-bottom: .45em;
+  padding-bottom: 0.45em;
+  margin-top: 0.8em;
 }
 
-#preview-viewport h2 { font-size: 1.5em; }
+#preview-viewport h2 {
+  font-size: 1.48em;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+  padding-bottom: 0.35em;
+}
+
 #preview-viewport h3 { font-size: 1.25em; }
 #preview-viewport h4 { font-size: 1.1em; }
 #preview-viewport h5 { font-size: 1.0em; }
 #preview-viewport h6 { font-size: 0.9em; }
 
 #preview-viewport p {
-  margin: 1em 0;
+  margin: 1.1em 0;
 }
 
 #preview-viewport a {
   color: var(--accent);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 3.5px;
   cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+#preview-viewport a:hover {
+  opacity: 0.82;
 }
 
 #preview-viewport blockquote {
   border-left: 3.5px solid var(--accent);
   color: var(--text-secondary);
-  margin: 1.5em 0;
-  padding: 0.2em 1.2em;
+  margin: 1.6em 0;
+  padding: 0.3em 1.25em;
   background: var(--bg-code);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 6px 6px 0;
+}
+
+#preview-viewport blockquote p {
+  margin: 0.6em 0;
 }
 
 #preview-viewport pre {
   padding: 18px 22px;
   border-radius: 8px;
   background: var(--bg-code);
+  border: 1px solid var(--border);
   overflow: auto;
-  line-height: 1.6;
+  line-height: 1.62;
+  margin: 1.5em 0;
 }
 
 #preview-viewport code {
   font-family: "Cascadia Code", "Consolas", Menlo, monospace;
-  font-size: .88em;
+  font-size: 0.88em;
   background: var(--bg-code);
   border-radius: 4px;
-  padding: 2px 5px;
+  padding: 2.5px 6px;
+  color: var(--accent);
 }
 
 #preview-viewport pre code {
   padding: 0;
   background: none;
-  font-size: .92em;
+  font-size: 0.92em;
+  color: var(--text-primary);
 }
 
 #preview-viewport img {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
+  margin: 1.2em 0;
+  box-shadow: var(--shadow-sm);
 }
 
 #preview-viewport table {
   border-collapse: collapse;
   display: block;
   overflow-x: auto;
-  margin: 1.5em 0;
+  margin: 1.6em 0;
   width: 100%;
 }
 
 #preview-viewport th,
 #preview-viewport td {
   border: 1px solid var(--border);
-  padding: 8px 16px;
+  padding: 9px 16px;
   text-align: left;
 }
 
@@ -110,24 +133,31 @@
   margin: 2.5em 0;
 }
 
+#preview-viewport ul,
+#preview-viewport ol {
+  padding-left: 24px;
+  margin: 1em 0;
+}
+
 #preview-viewport li {
-  margin: .28em 0;
+  margin: 0.35em 0;
 }
 
 #preview-viewport input[type=checkbox] {
   accent-color: var(--accent);
   cursor: pointer;
-  margin-right: 6px;
+  margin-right: 7px;
+  transform: translateY(1.5px);
 }
 
-/* 离线数学公式排版 */
+/* 离线数学公式排版容器 */
 .mowin-math[data-display=true] {
   display: block;
   text-align: center;
-  margin: 1.25em 0;
+  margin: 1.4em 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: .25em 0;
+  padding: 0.4em 0;
 }
 
 mjx-container {
@@ -145,7 +175,7 @@ mjx-container svg path {
 .math-error {
   color: #d32f2f;
   background: rgba(211, 47, 47, 0.08);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.88em;
 }

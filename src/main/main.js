@@ -6,6 +6,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { buildAppMenu } = require('./menu');
 const DefaultApp = require('./default-app');
 
@@ -175,17 +176,39 @@ function saveFileWithFormat(filePath, content, encoding = 'utf8', lineEnding = '
   fs.writeFileSync(filePath, buf);
 }
 
+// 单实例锁配置与多文件关联唤起
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine) => {
+    let targetFile = null;
+    const args = commandLine.slice(app.isPackaged ? 1 : 2);
+    for (const arg of args) {
+      if (!arg.startsWith('-') && fs.existsSync(arg) && fs.statSync(arg).isFile()) {
+        targetFile = path.resolve(arg);
+        break;
+      }
+    }
+    const win = createDocumentWindow(targetFile);
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
   // 设置自定义本地资源加载协议 mowin-resource://
   protocol.handle('mowin-resource', (request) => {
     try {
       const url = new URL(request.url);
       let rawPath = decodeURIComponent(url.pathname);
-      // Windows 路径开头斜杠处理
+      // Windows 路径开头斜杠处理 (/C:/... -> C:/...)
       if (process.platform === 'win32' && rawPath.startsWith('/') && rawPath.length > 2 && rawPath[2] === ':') {
         rawPath = rawPath.slice(1);
       }
-      return net.fetch('file:///' + rawPath.replace(/\\/g, '/'));
+      return net.fetch(pathToFileURL(rawPath).toString());
     } catch (e) {
       return new Response('Not Found', { status: 404 });
     }

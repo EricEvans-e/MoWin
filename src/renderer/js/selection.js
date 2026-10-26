@@ -11,6 +11,7 @@ class SelectionPopoverController {
     this.selectedRange = { start: 0, end: 0 };
     this.selectedText = '';
     this.showTimer = null;
+    this.lastMousePos = { x: 200, y: 200 };
 
     this.initElements();
   }
@@ -41,6 +42,11 @@ class SelectionPopoverController {
     this.listBtn.addEventListener('click', () => this.onInsertAfter('\n\n- 列表项\n- 列表项\n\n'));
     this.orderedListBtn.addEventListener('click', () => this.onInsertAfter('\n\n1. 列表项\n2. 列表项\n\n'));
 
+    // 记录鼠标抬起时的坐标，精准吸附选区旁边
+    this.app.editor.textarea.addEventListener('mouseup', (e) => {
+      this.lastMousePos = { x: e.clientX, y: e.clientY };
+    });
+
     // 点击其他空白区域关闭
     document.addEventListener('mousedown', (e) => {
       if (!this.popover.contains(e.target) && e.target !== this.app.editor.textarea) {
@@ -55,7 +61,7 @@ class SelectionPopoverController {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
 
-    // 仅在有有效选区且非阅读模式下显示
+    // 仅在有选中文本且非阅读模式下显示
     if (start === end || this.app.mode === 'read') {
       this.hide();
       return;
@@ -63,7 +69,7 @@ class SelectionPopoverController {
 
     this.showTimer = setTimeout(() => {
       this.show();
-    }, 200);
+    }, 180);
   }
 
   show() {
@@ -78,7 +84,7 @@ class SelectionPopoverController {
     this.selectedRange = { start, end };
     this.selectedText = textarea.value.slice(start, end);
 
-    // 智能识别选区是否包含 LaTeX 命令
+    // 智能识别选区是否包含 LaTeX 结构
     const convertedFormula = window.mowinAPI.latex.markdownFormula(this.selectedText);
     if (convertedFormula) {
       this.formulaBtn.style.display = 'flex';
@@ -88,13 +94,22 @@ class SelectionPopoverController {
 
     this.headingSelect.value = '';
 
-    // 计算定位位置
-    const rect = textarea.getBoundingClientRect();
-    const x = Math.min(window.innerWidth - 220, Math.max(20, rect.left + 80));
-    const y = Math.min(window.innerHeight - 380, Math.max(60, rect.top + 60));
+    // 精确吸附在鼠标点击或选区右下方
+    const popoverWidth = 210;
+    const popoverHeight = convertedFormula ? 410 : 375;
+    let x = this.lastMousePos.x + 15;
+    let y = this.lastMousePos.y + 15;
 
-    this.popover.style.left = `${x}px`;
-    this.popover.style.top = `${y}px`;
+    // 边界检测
+    if (x + popoverWidth > window.innerWidth - 10) {
+      x = this.lastMousePos.x - popoverWidth - 10;
+    }
+    if (y + popoverHeight > window.innerHeight - 35) {
+      y = window.innerHeight - popoverHeight - 35;
+    }
+
+    this.popover.style.left = `${Math.max(10, x)}px`;
+    this.popover.style.top = `${Math.max(50, y)}px`;
     this.popover.style.display = 'flex';
   }
 
@@ -112,6 +127,7 @@ class SelectionPopoverController {
       selection: [this.selectedRange.start, this.selectedRange.start + converted.length]
     });
     this.hide();
+    this.app.editor.textarea.focus();
   }
 
   onBold() {
@@ -119,6 +135,7 @@ class SelectionPopoverController {
     const edit = window.mowinAPI.formatting.emphasis(text, this.selectedRange, '**');
     this.app.editor.applyEdit(edit);
     this.hide();
+    this.app.editor.textarea.focus();
   }
 
   onRegular() {
@@ -126,6 +143,7 @@ class SelectionPopoverController {
     const edit = window.mowinAPI.formatting.emphasis(text, this.selectedRange, '**', true);
     this.app.editor.applyEdit(edit);
     this.hide();
+    this.app.editor.textarea.focus();
   }
 
   onItalic() {
@@ -133,6 +151,7 @@ class SelectionPopoverController {
     const edit = window.mowinAPI.formatting.emphasis(text, this.selectedRange, '*');
     this.app.editor.applyEdit(edit);
     this.hide();
+    this.app.editor.textarea.focus();
   }
 
   onHeadingChange(e) {
@@ -143,6 +162,7 @@ class SelectionPopoverController {
     const edit = window.mowinAPI.formatting.heading(text, this.selectedRange, level);
     this.app.editor.applyEdit(edit);
     this.hide();
+    this.app.editor.textarea.focus();
   }
 
   onInsertAfter(snippet) {
@@ -154,6 +174,7 @@ class SelectionPopoverController {
     this.app.editor.updateGutter();
     this.app.onTextChanged();
     this.hide();
+    this.app.editor.textarea.focus();
   }
 
   async onInsertImage() {
