@@ -1,0 +1,151 @@
+/* ==========================================================================
+   墨窗 (MoWin) - Markdown 排版与阅读样式
+   基于经典自然纸质感排版，针对中文正文与公式精心调优行高与留白
+   ========================================================================== */
+
+#preview-viewport {
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 16px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+#preview-viewport h1,
+#preview-viewport h2,
+#preview-viewport h3,
+#preview-viewport h4,
+#preview-viewport h5,
+#preview-viewport h6 {
+  line-height: 1.38;
+  scroll-margin-top: 36px;
+  font-weight: 650;
+  margin: 1.7em 0 .65em;
+  color: var(--text-primary);
+}
+
+#preview-viewport h1 {
+  font-size: 2em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .45em;
+}
+
+#preview-viewport h2 { font-size: 1.5em; }
+#preview-viewport h3 { font-size: 1.25em; }
+#preview-viewport h4 { font-size: 1.1em; }
+#preview-viewport h5 { font-size: 1.0em; }
+#preview-viewport h6 { font-size: 0.9em; }
+
+#preview-viewport p {
+  margin: 1em 0;
+}
+
+#preview-viewport a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+#preview-viewport blockquote {
+  border-left: 3.5px solid var(--accent);
+  color: var(--text-secondary);
+  margin: 1.5em 0;
+  padding: 0.2em 1.2em;
+  background: var(--bg-code);
+  border-radius: 0 4px 4px 0;
+}
+
+#preview-viewport pre {
+  padding: 18px 22px;
+  border-radius: 8px;
+  background: var(--bg-code);
+  overflow: auto;
+  line-height: 1.6;
+}
+
+#preview-viewport code {
+  font-family: "Cascadia Code", "Consolas", Menlo, monospace;
+  font-size: .88em;
+  background: var(--bg-code);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+#preview-viewport pre code {
+  padding: 0;
+  background: none;
+  font-size: .92em;
+}
+
+#preview-viewport img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+#preview-viewport table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  margin: 1.5em 0;
+  width: 100%;
+}
+
+#preview-viewport th,
+#preview-viewport td {
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  text-align: left;
+}
+
+#preview-viewport th {
+  background: var(--bg-code);
+  font-weight: 600;
+}
+
+#preview-viewport hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2.5em 0;
+}
+
+#preview-viewport li {
+  margin: .28em 0;
+}
+
+#preview-viewport input[type=checkbox] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin-right: 6px;
+}
+
+/* 离线数学公式排版 */
+.mowin-math[data-display=true] {
+  display: block;
+  text-align: center;
+  margin: 1.25em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: .25em 0;
+}
+
+mjx-container {
+  max-width: 100%;
+}
+
+mjx-container svg {
+  max-width: none;
+}
+
+mjx-container svg path {
+  fill: currentColor;
+}
+
+.math-error {
+  color: #d32f2f;
+  background: rgba(211, 47, 47, 0.08);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}

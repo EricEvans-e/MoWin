@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>墨窗 · 专注于纯粹写作与排版</title>
+  <link rel="stylesheet" href="styles/app.css">
+  <link rel="stylesheet" href="styles/preview.css">
+</head>
+<body>
+  <div id="app-container">
+    <!-- 顶部操作栏 -->
+    <header id="top-toolbar">
+      <button id="btn-sidebar-toggle" class="toolbar-btn" title="显示 / 隐藏侧栏 (Ctrl+\)">
+        <svg viewBox="0 0 24 24"><path d="M3 4h18v16H3V4zm2 2v12h4V6H5zm6 0v12h8V6h-8z"/></svg>
+        <span>侧栏</span>
+      </button>
+
+      <button id="btn-toolbar-open" class="toolbar-btn" title="打开文件 (Ctrl+O)">
+        <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        <span>打开</span>
+      </button>
+
+      <button id="btn-toolbar-save" class="toolbar-btn" title="保存文件 (Ctrl+S)">
+        <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+        <span>保存</span>
+      </button>
+
+      <div class="spacer"></div>
+
+      <div id="document-title-display">未命名</div>
+
+      <div class="spacer"></div>
+
+      <!-- 模式切换：编辑 / 双栏 / 阅读 -->
+      <div class="segmented-control">
+        <button id="mode-btn-edit" class="segmented-btn" title="仅显示 Markdown 编辑区 (Ctrl+1)">编辑</button>
+        <button id="mode-btn-split" class="segmented-btn active" title="双栏实时排版预览 (Ctrl+2)">双栏</button>
+        <button id="mode-btn-read" class="segmented-btn" title="仅显示排版正文阅读 (Ctrl+3)">阅读</button>
+      </div>
+
+      <!-- 外观切换按钮 -->
+      <button id="btn-toolbar-theme" class="toolbar-btn" title="切换外观主题 (跟随系统 / 浅色 / 深色)">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z"/></svg>
+        <span>外观</span>
+      </button>
+    </header>
+
+    <!-- 主体区域 -->
+    <div id="main-workspace">
+      <!-- 侧栏 -->
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-brand">墨窗  /  MOWIN</span>
+        </div>
+
+        <div class="sidebar-tabs">
+          <button id="sidebar-tab-outline" class="sidebar-tab-btn active">大纲</button>
+          <button id="sidebar-tab-files" class="sidebar-tab-btn">文件</button>
+        </div>
+
+        <div id="sidebar-section-title" class="sidebar-section-title">当前文档大纲</div>
+
+        <div id="sidebar-content" class="sidebar-content"></div>
+
+        <button id="btn-choose-folder" class="sidebar-action-btn" style="display: none; margin: 0 14px 10px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3v-3h2v3h3v2z"/></svg>
+          <span>选择文件夹…</span>
+        </button>
+
+        <!-- 侧栏底部：导出 PDF / HTML -->
+        <div class="sidebar-footer">
+          <span class="sidebar-footer-label">导出文档</span>
+          <span style="font-size: 11px; color: var(--text-secondary);">PDF 页边距</span>
+          <select id="select-pdf-margin" class="sidebar-select">
+            <option value="0">正常 · 25.4 mm</option>
+            <option value="1">较窄 · 12.7 mm</option>
+            <option value="2">极窄 · 6.35 mm</option>
+          </select>
+
+          <button id="btn-export-pdf" class="sidebar-action-btn" title="打印或存储为 PDF 文件">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+            <span>打印 / 导出 PDF…</span>
+          </button>
+
+          <button id="btn-export-html" class="sidebar-action-btn" title="导出离线 HTML 文件">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+            <span>导出 HTML…</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- 编辑与预览区域 -->
+      <main id="content-split">
+        <!-- 编辑区 -->
+        <div id="editor-container" class="content-pane">
+          <div id="editor-gutter">1</div>
+          <textarea id="markdown-editor" spellcheck="false" placeholder="在此输入 Markdown 文本…"></textarea>
+          <!-- 悬浮缩放档位徽章 -->
+          <div class="scale-badge" title="左栏显示比例：只改变屏幕字号，不修改源文件">
+            <select id="editor-scale-select"></select>
+          </div>
+        </div>
+
+        <!-- 拖拽分割条 -->
+        <div id="pane-divider"></div>
+
+        <!-- 排版预览区 -->
+        <div id="preview-container" class="content-pane">
+          <div id="preview-viewport"></div>
+          <!-- 悬浮缩放档位徽章 -->
+          <div class="scale-badge" title="右栏显示比例：只改变预览缩放，不修改源文件">
+            <select id="preview-scale-select"></select>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- 查找与替换浮动栏 -->
+    <div id="find-replace-bar">
+      <div class="find-row">
+        <input id="find-input" class="find-input" type="text" placeholder="查找内容…">
+        <span id="find-count" class="find-count">0 / 0</span>
+        <button id="btn-find-prev" class="find-action-btn" title="上一个 (Shift+Enter)">▲</button>
+        <button id="btn-find-next" class="find-action-btn" title="下一个 (Enter)">▼</button>
+        <button id="btn-find-close" class="find-close-btn" title="关闭 (Esc)">✕</button>
+      </div>
+      <div id="replace-row" class="find-row" style="display: none;">
+        <input id="replace-input" class="find-input" type="text" placeholder="替换为…">
+        <button id="btn-replace" class="find-action-btn">替换</button>
+        <button id="btn-replace-all" class="find-action-btn">全部替换</button>
+      </div>
+    </div>
+
+    <!-- 选区浮动菜单 -->
+    <div id="selection-popover">
+      <button id="popover-btn-formula" class="popover-btn formula-action" style="display: none;">
+        <svg viewBox="0 0 24 24"><path d="M4.5 4h15v2h-13v4h11v2h-11v6h13v2h-15V4z"/></svg>
+        <span>转换公式</span>
+      </button>
+
+      <button id="popover-btn-bold" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>
+        <span>加粗</span>
+      </button>
+
+      <button id="popover-btn-regular" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4H5z"/></svg>
+        <span>常规字重</span>
+      </button>
+
+      <button id="popover-btn-italic" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4h-8z"/></svg>
+        <span>斜体</span>
+      </button>
+
+      <select id="popover-select-heading" class="popover-select">
+        <option value="">变为标题…</option>
+        <option value="1">1 级标题</option>
+        <option value="2">2 级标题</option>
+        <option value="3">3 级标题</option>
+        <option value="4">4 级标题</option>
+        <option value="5">5 级标题</option>
+        <option value="6">6 级标题</option>
+        <option value="0">恢复正文</option>
+      </select>
+
+      <div class="popover-divider"></div>
+
+      <button id="popover-btn-code" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+        <span>代码块</span>
+      </button>
+
+      <button id="popover-btn-image" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+        <span>本地图片…</span>
+      </button>
+
+      <button id="popover-btn-link" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+        <span>链接</span>
+      </button>
+
+      <button id="popover-btn-table" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 4h16V5H4v2zm7 3H4v4h7v-4zm2 0v4h7v-4h-7zm-2 6H4v3h7v-3zm2 0v3h7v-3h-7z"/></svg>
+        <span>表格</span>
+      </button>
+
+      <button id="popover-btn-list" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z"/></svg>
+        <span>无序列表</span>
+      </button>
+
+      <button id="popover-btn-ordered-list" class="popover-btn">
+        <svg viewBox="0 0 24 24"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"/></svg>
+        <span>有序列表</span>
+      </button>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <footer id="status-bar">
+      0 字符   ·   1 行   ·   第 1 行   ·   UTF-8 / CRLF   ·   已保存
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

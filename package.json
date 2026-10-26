@@ -1,0 +1,29 @@
+{
+  "name": "mowin",
+  "productName": "墨窗",
+  "version": "1.0.0",
+  "description": "墨窗 (MoWin) - Windows Markdown 阅读与编辑器，支持双向同步滚动、离线数学公式与极简优雅排版",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/self-tests.js"
+  },
+  "keywords": [
+    "markdown",
+    "editor",
+    "viewer",
+    "mathjax",
+    "windows",
+    "latex",
+    "gfm"
+  ],
+  "author": "MoWin Team",
+  "license": "MIT",
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "markdown-it-task-lists": "^2.1.1"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}
