@@ -66,9 +66,18 @@ class AppController {
       }
     });
 
-    // 监听窗口调整时重新估算源码位置
+    // 监听窗口调整时重新估算源码位置与行号
     window.addEventListener('resize', () => {
+      this.editor.updateGutter();
       if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+    });
+
+    // 全局快捷键补全：支持 Ctrl+Shift+Z 重做
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'z' && e.shiftKey) {
+        e.preventDefault();
+        this.editor.redo();
+      }
     });
 
     window.invalidateSourceBlocks = () => {
@@ -127,6 +136,7 @@ class AppController {
         isDragging = false;
         this.paneDivider.classList.remove('resizing');
         document.body.style.cursor = 'default';
+        this.editor.updateGutter();
         if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
       }
     });
@@ -158,8 +168,8 @@ class AppController {
         case 'open-sample': this.openSample(); break;
 
         // 编辑菜单
-        case 'undo': document.execCommand('undo'); break;
-        case 'redo': document.execCommand('redo'); break;
+        case 'undo': this.editor.undo(); break;
+        case 'redo': this.editor.redo(); break;
         case 'find': this.search.show(false); break;
         case 'replace': this.search.show(true); break;
         case 'find-next': this.search.findNext(); break;
@@ -260,6 +270,9 @@ class AppController {
         }
         img.src = `mowin-resource:///${encodeURIComponent(absImgPath.replace(/\\/g, '/'))}`;
       }
+      img.addEventListener('load', () => {
+        if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+      });
     }
 
     this.previewViewport.innerHTML = tempContainer.innerHTML;
@@ -291,6 +304,7 @@ class AppController {
           }
         }
         this.sidebar.setPdfEnabled(true);
+        if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
       } catch (err) {
         console.warn('MathJax 排版异常:', err);
       }
@@ -343,6 +357,9 @@ class AppController {
       this.editor.textarea.focus();
     }
     this.selectionPopover.hide();
+    if (mode !== 'read') {
+      this.editor.updateGutter();
+    }
     if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
   }
 
@@ -374,6 +391,7 @@ class AppController {
     this.editor.setValue('', [0, 0]);
     this.editor.rebuildLineStarts();
     this.editor.updateGutter();
+    this.editor.history.init('');
     this.renderPreview();
     this.updateTitleAndStatus();
   }
@@ -399,6 +417,7 @@ class AppController {
     this.editor.setValue(res.content, [0, 0]);
     this.editor.rebuildLineStarts();
     this.editor.updateGutter();
+    this.editor.history.init(res.content);
     this.renderPreview();
     this.updateTitleAndStatus();
   }
@@ -558,6 +577,7 @@ $$
     this.editor.setValue(sampleText, [0, 0]);
     this.editor.rebuildLineStarts();
     this.editor.updateGutter();
+    this.editor.history.init(sampleText);
     this.renderPreview();
     this.updateTitleAndStatus();
   }

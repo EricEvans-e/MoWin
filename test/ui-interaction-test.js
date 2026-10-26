@@ -46,22 +46,36 @@ app.whenReady().then(async () => {
 
       // 1. 验证默认示例文档完整加载与排版
       res.push('Initial text length=' + app.editor.textarea.value.length);
-      res.push('Initial gutter lines=' + app.editor.gutter.textContent.trim().split('\\n').length);
+      res.push('Initial line measurements count=' + app.editor.lineMeasurements.length);
       res.push('Initial headings count=' + app.headings.length);
 
-      // 2. 测试编辑区滚动 -> 预览区双向同步
+      // 2. 测试撤销 / 重做 (Undo / Redo)
+      const prevVal = app.editor.textarea.value;
+      app.applyFormatting(text => window.mowinAPI.formatting.emphasis(text, { start: 0, end: 5 }, '**'));
+      const formattedVal = app.editor.textarea.value;
+      res.push('Bold applied: ' + (formattedVal !== prevVal));
+
+      app.editor.undo();
+      res.push('Undo success: ' + (app.editor.textarea.value === prevVal));
+
+      app.editor.redo();
+      res.push('Redo success: ' + (app.editor.textarea.value === formattedVal));
+
+      app.editor.undo(); // 还原回初始
+
+      // 3. 测试编辑区滚动 -> 预览区双向同步
       app.editor.textarea.scrollTop = 400;
       app.editor.textarea.dispatchEvent(new Event('scroll'));
       await new Promise(r => setTimeout(r, 120));
       res.push('Editor scroll (400px) -> previewContainer.scrollTop=' + Math.round(app.previewContainer.scrollTop));
 
-      // 3. 测试预览区滚动 -> 编辑区双向同步
+      // 4. 测试预览区滚动 -> 编辑区双向同步
       app.previewContainer.scrollTop = 600;
       app.previewContainer.dispatchEvent(new Event('scroll'));
       await new Promise(r => setTimeout(r, 120));
       res.push('Preview scroll (600px) -> editor.textarea.scrollTop=' + Math.round(app.editor.textarea.scrollTop));
 
-      // 4. 测试大纲跳转
+      // 5. 测试大纲跳转
       const outlineItems = document.querySelectorAll('.outline-item');
       if (outlineItems.length > 2) {
         outlineItems[2].click();
@@ -69,7 +83,7 @@ app.whenReady().then(async () => {
         res.push('Clicked 3rd outline item, preview scrollTop=' + Math.round(app.previewContainer.scrollTop));
       }
 
-      // 5. 测试浮动选区菜单与智能 LaTeX 转换识别
+      // 6. 测试浮动选区菜单与智能 LaTeX 转换识别
       app.editor.setValue('测试文本 \\\\( \\\\alpha + \\\\beta \\\\) 结尾', [5, 23]);
       app.editor.rebuildLineStarts();
       app.editor.updateGutter();
@@ -81,7 +95,7 @@ app.whenReady().then(async () => {
       app.selectionPopover.onConvertFormula();
       res.push('Converted text in editor=' + app.editor.textarea.value);
 
-      // 6. 恢复示例文档
+      // 7. 恢复示例文档
       await app.openSample();
       res.push('Sample restored successfully');
 
