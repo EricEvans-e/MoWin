@@ -89,4 +89,4 @@ class DisplayScaleController {
   }
 }
 
-module.exports = DisplayScaleController;
+window.DisplayScaleController = DisplayScaleController;

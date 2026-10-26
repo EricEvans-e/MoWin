@@ -204,6 +204,28 @@
     </footer>
   </div>
 
+  <!-- 离线 MathJax 配置与脚本 -->
+  <script>
+    window.MathJax = {
+      loader: { load: [] },
+      tex: {
+        packages: ['base', 'ams', 'newcommand', 'noundefined', 'configmacros', 'boldsymbol', 'mathtools', 'cancel', 'color'],
+        maxBuffer: 100000
+      },
+      svg: { fontCache: 'none' },
+      options: { enableMenu: false, enableAssistiveMml: false },
+      startup: { typeset: false }
+    };
+  </script>
+  <script src="../../vendor/MathJax/tex-svg-full.js"></script>
+
+  <!-- 业务控制器脚本 -->
+  <script src="js/editor.js"></script>
+  <script src="js/scroll-sync.js"></script>
+  <script src="js/selection.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/scale.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

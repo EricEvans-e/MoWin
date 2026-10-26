@@ -3,16 +3,6 @@
  * 聚合编辑器、排版预览、侧栏导航、双向同步滚动、选区浮动菜单、状态栏及离线 MathJax 排版
  */
 
-const path = require('path');
-const Markdown = require('../../common/markdown');
-const Formatting = require('../../common/formatting');
-const EditorController = require('./editor');
-const ScrollSyncEngine = require('./scroll-sync');
-const SidebarController = require('./sidebar');
-const SelectionPopoverController = require('./selection');
-const SearchController = require('./search');
-const DisplayScaleController = require('./scale');
-
 class AppController {
   constructor() {
     this.currentFilePath = null;
@@ -27,7 +17,6 @@ class AppController {
     this.initDOM();
     this.initComponents();
     this.initMenuListener();
-    this.initMathJax();
     this.loadInitialFile();
   }
 
@@ -78,41 +67,20 @@ class AppController {
   initComponents() {
     const textarea = document.getElementById('markdown-editor');
     const gutter = document.getElementById('editor-gutter');
-    this.editor = new EditorController(textarea, gutter, this);
+    this.editor = new window.EditorController(textarea, gutter, this);
 
-    this.sidebar = new SidebarController(document.getElementById('sidebar'), this);
-    this.scrollSync = new ScrollSyncEngine(this);
-    this.selectionPopover = new SelectionPopoverController(document.getElementById('selection-popover'), this);
-    this.search = new SearchController(document.getElementById('find-replace-bar'), this);
+    this.sidebar = new window.SidebarController(document.getElementById('sidebar'), this);
+    this.scrollSync = new window.ScrollSyncEngine(this);
+    this.selectionPopover = new window.SelectionPopoverController(document.getElementById('selection-popover'), this);
+    this.search = new window.SearchController(document.getElementById('find-replace-bar'), this);
 
     const editorScaleSelect = document.getElementById('editor-scale-select');
     const previewScaleSelect = document.getElementById('preview-scale-select');
-    this.scale = new DisplayScaleController(editorScaleSelect, previewScaleSelect, this);
+    this.scale = new window.DisplayScaleController(editorScaleSelect, previewScaleSelect, this);
 
     // 加载保存的主题
     const savedTheme = localStorage.getItem('mowin_theme') || 'system';
     this.setTheme(savedTheme);
-  }
-
-  initMathJax() {
-    window.MathJax = {
-      loader: { load: [] },
-      tex: {
-        packages: ['base', 'ams', 'newcommand', 'noundefined', 'configmacros', 'boldsymbol', 'mathtools', 'cancel', 'color'],
-        maxBuffer: 100000
-      },
-      svg: { fontCache: 'none' },
-      options: { enableMenu: false, enableAssistiveMml: false },
-      startup: { typeset: false }
-    };
-
-    // 动态载入离线 MathJax
-    const script = document.createElement('script');
-    script.src = '../../vendor/MathJax/tex-svg-full.js';
-    script.onload = () => {
-      this.renderPreview();
-    };
-    document.head.appendChild(script);
   }
 
   async loadInitialFile() {
@@ -120,18 +88,13 @@ class AppController {
     if (initialPath) {
       await this.openDocumentPath(initialPath);
     } else {
-      // 首次加载示例引导内容
-      const samplePath = path.join(__dirname, '../../../示例.md');
-      const fs = require('fs');
-      if (fs.existsSync(samplePath)) {
-        await this.openDocumentPath(samplePath);
-      } else {
-        this.newDocument();
-      }
+      await this.openSample();
     }
   }
 
   initMenuListener() {
+    const formatting = window.mowinAPI.formatting;
+
     window.mowinAPI.onMenuAction((action, ...args) => {
       switch (action) {
         case 'new-document': this.newDocument(); break;
@@ -154,17 +117,17 @@ class AppController {
         case 'find-prev': this.search.findPrev(); break;
 
         // 格式菜单
-        case 'format-bold': this.applyFormatting(text => Formatting.emphasis(text, this.getSelection(), '**')); break;
-        case 'format-italic': this.applyFormatting(text => Formatting.emphasis(text, this.getSelection(), '*')); break;
-        case 'format-inline-code': this.applyFormatting(text => Formatting.wrap(text, this.getSelection(), '`', '`', 'code')); break;
-        case 'format-strikethrough': this.applyFormatting(text => Formatting.wrap(text, this.getSelection(), '~~', '~~')); break;
-        case 'format-heading': this.applyFormatting(text => Formatting.heading(text, this.getSelection(), args[0])); break;
-        case 'format-quote': this.applyFormatting(text => Formatting.togglePrefix(text, this.getSelection(), '> ')); break;
-        case 'format-list': this.applyFormatting(text => Formatting.togglePrefix(text, this.getSelection(), '- ')); break;
-        case 'format-task-list': this.applyFormatting(text => Formatting.togglePrefix(text, this.getSelection(), '- [ ] ')); break;
-        case 'format-code-block': this.applyFormatting(text => Formatting.wrap(text, this.getSelection(), '\n```\n', '\n```\n', '代码')); break;
+        case 'format-bold': this.applyFormatting(text => formatting.emphasis(text, this.getSelection(), '**')); break;
+        case 'format-italic': this.applyFormatting(text => formatting.emphasis(text, this.getSelection(), '*')); break;
+        case 'format-inline-code': this.applyFormatting(text => formatting.wrap(text, this.getSelection(), '`', '`', 'code')); break;
+        case 'format-strikethrough': this.applyFormatting(text => formatting.wrap(text, this.getSelection(), '~~', '~~')); break;
+        case 'format-heading': this.applyFormatting(text => formatting.heading(text, this.getSelection(), args[0])); break;
+        case 'format-quote': this.applyFormatting(text => formatting.togglePrefix(text, this.getSelection(), '> ')); break;
+        case 'format-list': this.applyFormatting(text => formatting.togglePrefix(text, this.getSelection(), '- ')); break;
+        case 'format-task-list': this.applyFormatting(text => formatting.togglePrefix(text, this.getSelection(), '- [ ] ')); break;
+        case 'format-code-block': this.applyFormatting(text => formatting.wrap(text, this.getSelection(), '\n```\n', '\n```\n', '代码')); break;
         case 'format-table': this.editor.insertAtCursor('\n| 列一 | 列二 |\n| --- | --- |\n| 内容 | 内容 |\n'); break;
-        case 'format-link': this.applyFormatting(text => Formatting.wrap(text, this.getSelection(), '[', '](https://example.com)', '链接文字')); break;
+        case 'format-link': this.applyFormatting(text => formatting.wrap(text, this.getSelection(), '[', '](https://example.com)', '链接文字')); break;
         case 'format-image': this.selectionPopover.onInsertImage(); break;
 
         // 视图菜单
@@ -229,12 +192,12 @@ class AppController {
    */
   async renderPreview() {
     const text = this.editor.textarea.value;
-    const { body, headings } = Markdown.render(text);
+    const { body, headings } = window.mowinAPI.markdown.render(text);
     this.headings = headings;
     this.sidebar.updateHeadings(headings);
 
-    // 解析图片路径（若为本地图片，转换为 mowin-resource:// 协议进行加载）
-    const docDir = this.currentFilePath ? path.dirname(this.currentFilePath) : '';
+    // 解析图片路径（若为本地图片，转换为 mowin-resource:// 协议进行安全加载）
+    const docDir = this.currentFilePath ? window.mowinAPI.path.dirname(this.currentFilePath) : '';
     const tempContainer = document.createElement('div');
     tempContainer.innerHTML = body;
 
@@ -243,8 +206,8 @@ class AppController {
       const src = img.getAttribute('src');
       if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
         let absImgPath = src;
-        if (docDir && !path.isAbsolute(src)) {
-          absImgPath = path.resolve(docDir, src);
+        if (docDir && !window.mowinAPI.path.isAbsolute(src)) {
+          absImgPath = window.mowinAPI.path.resolve(docDir, src);
         }
         img.src = `mowin-resource:///${encodeURIComponent(absImgPath.replace(/\\/g, '/'))}`;
       }
@@ -392,7 +355,7 @@ class AppController {
   }
 
   async saveAs() {
-    const defaultName = this.currentFilePath ? path.basename(this.currentFilePath) : '未命名.md';
+    const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath) : '未命名.md';
     const filePath = await window.mowinAPI.saveFileDialog(defaultName);
     if (!filePath) return;
     this.currentFilePath = filePath;
@@ -410,11 +373,11 @@ class AppController {
   }
 
   async exportHTML() {
-    const defaultName = this.currentFilePath ? path.basename(this.currentFilePath, path.extname(this.currentFilePath)) : '文档';
+    const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath, window.mowinAPI.path.extname(this.currentFilePath)) : '文档';
     // 提取当前渲染好的预览内容与 MathJax SVG 样式
     const mainHtml = this.previewViewport.innerHTML;
     const mathStyles = Array.from(document.querySelectorAll('style[id^=MJX]')).map(s => s.outerHTML).join('\n');
-    const fullHtml = Markdown.page({ body: mainHtml }, {
+    const fullHtml = window.mowinAPI.markdown.page({ body: mainHtml }, {
       title: defaultName,
       typeset: false,
       mathStyles: mathStyles
@@ -429,12 +392,108 @@ class AppController {
   }
 
   async openSample() {
-    const samplePath = path.join(__dirname, '../../../示例.md');
-    await this.openDocumentPath(samplePath);
+    const sampleText = `# 墨窗 · 专注于纯粹写作与排版
+
+一窗幽墨，一点专注。欢迎使用为你精心打造的 Windows Markdown 阅读与编辑器。
+
+## 开始写作
+
+在左侧输入 Markdown，右侧会实时显示排版。通过顶部操作栏的按钮随时在 **编辑**、**双栏** 和 **阅读** 三种模式之间切换。
+
+> 文字完整保存在你自己的本地电脑中。墨窗不需要注册账号，完全离线运行，不连接任何第三方云端服务。
+
+### 常用格式
+
+支持 **加粗**、*斜体*、~~删除线~~、\`行内代码\`，以及丰富的表格与引用语法：
+
+- 纯净本地存储，保障数据隐私安全
+- 回车自动智能续写列表项
+  - 空项回车自动退出列表
+  - 支持多层嵌套结构
+
+1. 打开或新建文件
+2. 专注于输入内容
+3. 按 Ctrl+S 极速保存
+
+### 今日清单
+
+- [x] 打开墨窗体验全新界面
+- [x] 感受左右双栏视口第一行精准对齐
+- [ ] 记录下今天的所思所想
+
+## 表格与快捷键
+
+| 功能 | Windows 快捷键 | 功能 | Windows 快捷键 |
+| :--- | :--- | :--- | :--- |
+| 新建文档 | Ctrl+N | 保存文档 | Ctrl+S |
+| 查找与替换 | Ctrl+F / Ctrl+H | 插入链接 | Ctrl+K |
+| 切换加粗 | Ctrl+B | 切换斜体 | Ctrl+I |
+| 标题等级 | Ctrl+Alt+1~6 | 恢复正文 | Ctrl+Alt+0 |
+| 显示/隐藏侧栏 | Ctrl+\\ | 导出 PDF / 打印 | Ctrl+P |
+
+\`\`\`javascript
+// 你好，墨窗！
+function greetMoWin() {
+  const message = "用文字记录思考，以排版呈现优雅。";
+  console.log(message);
+}
+greetMoWin();
+\`\`\`
+
+## 离线数学公式
+
+内置离线 MathJax 组件，无需联网即可排版复杂的科学公式与对齐矩阵：
+
+行内公式：$\\frac{a_1}{b}$，根式公式：$\\sqrt{x^2+y^2}$。
+
+$$
+\\int_0^1 x^2\\,dx = \\frac{1}{3}
+$$
+
+$$
+\\begin{aligned}
+a+b &= c \\\\
+x &= c-b
+\\end{aligned}
+$$
+
+$$
+\\begin{pmatrix}
+1 & 2 \\\\
+3 & 4
+\\end{pmatrix}
+$$
+
+> 提示：在编辑区选中任意 LaTeX 代码后，浮动菜单首项会自动显示「**转换公式**」，一键将 \\(...\\)、\\[...\\] 或公式命令转为标准 Markdown 公式！
+
+## 本地图片支持
+
+支持从 Windows 资源管理器直接将图片拖拽到编辑区，或通过菜单「插入本地图片…」选择。墨窗会智能根据文件位置自动采用相对路径（同级或子文件夹）或绝对路径，并支持包含空格路径的自动转义。
+
+## 双向同步滚动与独立缩放
+
+- **首行对准同步**：在双栏模式下滑动任意一栏，另一栏随之跟随，并且视口首行精确对应相同内容；若需独立查阅，可在「视图 → 双栏同步滚动」中取消勾选。
+- **独立显示比例**：左栏与右栏右下角均可独立切换 50% ~ 200% 显示比例。缩小字号可以在一屏内展现更多篇幅，不改变实际文档内容。
+- **大纲与文件目录**：点击左上角「侧栏」，随时在大纲跳转和本地文件夹树之间切换。
+- **导出与分享**：侧栏底部提供「导出 HTML」与「打印 / 导出 PDF」，预设正常、较窄、极窄三档专业页边距。
+
+---
+
+愿墨窗陪伴你写下的每一个字符，都成为值得留存的印记。
+`;
+    this.currentFilePath = null;
+    this.currentEncoding = 'utf8';
+    this.currentLineEnding = '\r\n';
+    this.isModified = false;
+    this.editor.setValue(sampleText, [0, 0]);
+    this.editor.rebuildLineStarts();
+    this.editor.updateGutter();
+    this.renderPreview();
+    this.updateTitleAndStatus();
   }
 
   updateTitleAndStatus() {
-    const fileName = this.currentFilePath ? path.basename(this.currentFilePath) : '未命名';
+    const fileName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath) : '未命名';
     const dirtyMarker = this.isModified ? ' •' : '';
     const fullTitle = `${fileName}${dirtyMarker} - 墨窗`;
 

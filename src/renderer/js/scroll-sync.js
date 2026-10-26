@@ -71,4 +71,4 @@ class ScrollSyncEngine {
   }
 }
 
-module.exports = ScrollSyncEngine;
+window.ScrollSyncEngine = ScrollSyncEngine;

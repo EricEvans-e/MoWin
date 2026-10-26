@@ -4,9 +4,6 @@
  * 提供加粗、常规字重、斜体、标题等级切换、代码块、本地图片、链接、表格、列表等全套操作
  */
 
-const LaTeX = require('../../common/latex');
-const Formatting = require('../../common/formatting');
-
 class SelectionPopoverController {
   constructor(popoverEl, app) {
     this.popover = popoverEl;
@@ -82,7 +79,7 @@ class SelectionPopoverController {
     this.selectedText = textarea.value.slice(start, end);
 
     // 智能识别选区是否包含 LaTeX 命令
-    const convertedFormula = LaTeX.markdownFormula(this.selectedText);
+    const convertedFormula = window.mowinAPI.latex.markdownFormula(this.selectedText);
     if (convertedFormula) {
       this.formulaBtn.style.display = 'flex';
     } else {
@@ -91,7 +88,7 @@ class SelectionPopoverController {
 
     this.headingSelect.value = '';
 
-    // 计算定位位置 (跟随光标或视口中央)
+    // 计算定位位置
     const rect = textarea.getBoundingClientRect();
     const x = Math.min(window.innerWidth - 220, Math.max(20, rect.left + 80));
     const y = Math.min(window.innerHeight - 380, Math.max(60, rect.top + 60));
@@ -107,7 +104,7 @@ class SelectionPopoverController {
   }
 
   onConvertFormula() {
-    const converted = LaTeX.markdownFormula(this.selectedText);
+    const converted = window.mowinAPI.latex.markdownFormula(this.selectedText);
     if (!converted) return;
     this.app.editor.applyEdit({
       range: [this.selectedRange.start, this.selectedRange.end],
@@ -119,21 +116,21 @@ class SelectionPopoverController {
 
   onBold() {
     const text = this.app.editor.textarea.value;
-    const edit = Formatting.emphasis(text, this.selectedRange, '**');
+    const edit = window.mowinAPI.formatting.emphasis(text, this.selectedRange, '**');
     this.app.editor.applyEdit(edit);
     this.hide();
   }
 
   onRegular() {
     const text = this.app.editor.textarea.value;
-    const edit = Formatting.emphasis(text, this.selectedRange, '**', true);
+    const edit = window.mowinAPI.formatting.emphasis(text, this.selectedRange, '**', true);
     this.app.editor.applyEdit(edit);
     this.hide();
   }
 
   onItalic() {
     const text = this.app.editor.textarea.value;
-    const edit = Formatting.emphasis(text, this.selectedRange, '*');
+    const edit = window.mowinAPI.formatting.emphasis(text, this.selectedRange, '*');
     this.app.editor.applyEdit(edit);
     this.hide();
   }
@@ -143,7 +140,7 @@ class SelectionPopoverController {
     if (val === '') return;
     const level = parseInt(val, 10);
     const text = this.app.editor.textarea.value;
-    const edit = Formatting.heading(text, this.selectedRange, level);
+    const edit = window.mowinAPI.formatting.heading(text, this.selectedRange, level);
     this.app.editor.applyEdit(edit);
     this.hide();
   }
@@ -164,10 +161,9 @@ class SelectionPopoverController {
     const filePath = await window.mowinAPI.openFileDialog();
     if (!filePath) return;
     const altText = this.selectedText || '图片';
-    const ImagePaths = require('../../common/image-paths');
-    const md = ImagePaths.markdown(filePath, this.app.currentFilePath, altText);
+    const md = window.mowinAPI.imagePaths.markdown(filePath, this.app.currentFilePath, altText);
     this.onInsertAfter('\n' + md + '\n');
   }
 }
 
-module.exports = SelectionPopoverController;
+window.SelectionPopoverController = SelectionPopoverController;

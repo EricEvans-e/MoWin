@@ -3,9 +3,6 @@
  * 包含行号同步、智能列表续写、制表符缩进、撤销/重做支持、拖拽插入图片及滚动行号计算
  */
 
-const Formatting = require('../../common/formatting');
-const ImagePaths = require('../../common/image-paths');
-
 class EditorController {
   constructor(textareaEl, gutterEl, app) {
     this.textarea = textareaEl;
@@ -18,6 +15,9 @@ class EditorController {
   }
 
   initEvents() {
+    const formatting = window.mowinAPI.formatting;
+    const imagePaths = window.mowinAPI.imagePaths;
+
     // 监听输入
     this.textarea.addEventListener('input', () => {
       this.rebuildLineStarts();
@@ -51,7 +51,7 @@ class EditorController {
         const lineStart = text.lastIndexOf('\n', selStart - 1) + 1;
         const currentLine = text.slice(lineStart, selStart);
 
-        const smart = Formatting.smartNewline(currentLine, currentLine.length);
+        const smart = formatting.smartNewline(currentLine, currentLine.length);
         if (smart.handled) {
           e.preventDefault();
           if (smart.exitList) {
@@ -104,11 +104,11 @@ class EditorController {
     this.textarea.addEventListener('drop', (e) => {
       e.preventDefault();
       const files = Array.from(e.dataTransfer.files || []);
-      const imgFiles = files.filter(f => ImagePaths.isImage(f.path));
+      const imgFiles = files.filter(f => imagePaths.isImage(f.path));
       if (!imgFiles.length) return;
 
       const docPath = this.app.currentFilePath;
-      const mdImages = imgFiles.map(f => ImagePaths.markdown(f.path, docPath)).join('\n');
+      const mdImages = imgFiles.map(f => imagePaths.markdown(f.path, docPath)).join('\n');
       this.insertAtCursor('\n' + mdImages + '\n');
       this.app.onTextChanged();
     });
@@ -211,7 +211,7 @@ class EditorController {
     const scrollHeight = this.textarea.scrollHeight - this.textarea.clientHeight;
     if (scrollHeight <= 0) return 1;
 
-    // 单行平均高度估算 (15px * 1.85 约为 27.75px)
+    // 单行平均高度估算
     const lineHeight = this.textarea.scrollHeight / totalLines;
     const exactLine = (scrollTop / lineHeight) + 1;
     return Math.max(1, Math.min(totalLines, exactLine));
@@ -232,4 +232,4 @@ class EditorController {
   }
 }
 
-module.exports = EditorController;
+window.EditorController = EditorController;

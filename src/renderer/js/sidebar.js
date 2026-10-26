@@ -2,8 +2,6 @@
  * 墨窗 (MoWin) - 侧栏控制器 (大纲树、文件目录与导出面板)
  */
 
-const path = require('path');
-
 class SidebarController {
   constructor(sidebarEl, app) {
     this.sidebar = sidebarEl;
@@ -49,7 +47,8 @@ class SidebarController {
     } else {
       this.tabFilesBtn.classList.add('active');
       this.tabOutlineBtn.classList.remove('active');
-      this.sectionTitle.textContent = this.currentFolder ? path.basename(this.currentFolder) : '请选择 Markdown 文件夹';
+      const folderName = this.currentFolder ? window.mowinAPI.path.basename(this.currentFolder) : '请选择 Markdown 文件夹';
+      this.sectionTitle.textContent = folderName;
       this.chooseFolderBtn.style.display = 'flex';
       this.renderFiles();
     }
@@ -94,7 +93,7 @@ class SidebarController {
     const folder = await window.mowinAPI.chooseFolderDialog();
     if (!folder) return;
     this.currentFolder = folder;
-    this.sectionTitle.textContent = path.basename(folder);
+    this.sectionTitle.textContent = window.mowinAPI.path.basename(folder);
     await this.refreshFiles();
   }
 
@@ -131,7 +130,7 @@ class SidebarController {
     this.filesList.forEach(filePath => {
       const item = document.createElement('div');
       item.className = 'file-item';
-      const relPath = path.relative(this.currentFolder, filePath);
+      const relPath = window.mowinAPI.path.relative(this.currentFolder, filePath);
       item.textContent = relPath;
       item.title = filePath;
 
@@ -157,4 +156,4 @@ class SidebarController {
   }
 }
 
-module.exports = SidebarController;
+window.SidebarController = SidebarController;

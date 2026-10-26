@@ -162,4 +162,4 @@ class SearchController {
   }
 }
 
-module.exports = SearchController;
+window.SearchController = SearchController;
