@@ -64,6 +64,8 @@ function createDocumentWindow(targetFilePath = null) {
     }
   });
 
+  win.webContents.setVisualZoomLevelLimits(1, 1);
+
   const winInfo = {
     win,
     filePath: targetFilePath ? path.resolve(targetFilePath) : null,

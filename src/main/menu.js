@@ -144,24 +144,36 @@ function buildAppMenu(createDocumentWindow) {
         { label: '刷新文件列表', click: () => send('refresh-files') },
         { label: '切换外观 (系统 / 浅色 / 深色)', click: () => send('cycle-theme') },
         { type: 'separator' },
+        { label: '放大(&I)', accelerator: 'CmdOrCtrl+=', click: () => send('zoom-in') },
+        { label: '缩小(&O)', accelerator: 'CmdOrCtrl+-', click: () => send('zoom-out') },
+        { label: '重置显示比例(&R)', accelerator: 'CmdOrCtrl+0', click: () => send('zoom-reset') },
+        { type: 'separator' },
         {
-          label: '左栏显示比例',
-          submenu: scaleLevels.map(p => ({
-            label: `${p}%`,
-            click: () => send('set-editor-scale', p)
-          }))
+          label: '左栏显示比例 (编辑区)',
+          submenu: [
+            { label: '增大左栏字号', accelerator: 'CmdOrCtrl+Alt+=', click: () => send('editor-zoom-in') },
+            { label: '减小左栏字号', accelerator: 'CmdOrCtrl+Alt+-', click: () => send('editor-zoom-out') },
+            { label: '重置左栏 (100%)', click: () => send('set-editor-scale', 100) },
+            { type: 'separator' },
+            ...scaleLevels.map(p => ({
+              label: `${p}%`,
+              click: () => send('set-editor-scale', p)
+            }))
+          ]
         },
         {
-          label: '右栏显示比例',
-          submenu: scaleLevels.map(p => ({
-            label: `${p}%`,
-            click: () => send('set-preview-scale', p)
-          }))
-        },
-        { label: '增大左栏字号', accelerator: 'CmdOrCtrl+=', click: () => send('font-larger') },
-        { label: '减小左栏字号', accelerator: 'CmdOrCtrl+-', click: () => send('font-smaller') },
-        { label: '增大右栏字号', accelerator: 'CmdOrCtrl+Shift+=', click: () => send('preview-larger') },
-        { label: '减小右栏字号', accelerator: 'CmdOrCtrl+Shift+-', click: () => send('preview-smaller') }
+          label: '右栏显示比例 (排版预览)',
+          submenu: [
+            { label: '增大右栏字号', accelerator: 'CmdOrCtrl+Shift+=', click: () => send('preview-zoom-in') },
+            { label: '减小右栏字号', accelerator: 'CmdOrCtrl+Shift+-', click: () => send('preview-zoom-out') },
+            { label: '重置右栏 (100%)', click: () => send('set-preview-scale', 100) },
+            { type: 'separator' },
+            ...scaleLevels.map(p => ({
+              label: `${p}%`,
+              click: () => send('set-preview-scale', p)
+            }))
+          ]
+        }
       ]
     },
     {

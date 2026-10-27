@@ -232,10 +232,17 @@ class AppController {
         case 'cycle-theme': this.cycleTheme(); break;
         case 'set-editor-scale': this.scale.setEditorScale(args[0]); break;
         case 'set-preview-scale': this.scale.setPreviewScale(args[0]); break;
-        case 'font-larger': this.scale.stepEditor(1); break;
-        case 'font-smaller': this.scale.stepEditor(-1); break;
-        case 'preview-larger': this.scale.stepPreview(1); break;
-        case 'preview-smaller': this.scale.stepPreview(-1); break;
+        case 'zoom-in': this.scale.zoomIn(); break;
+        case 'zoom-out': this.scale.zoomOut(); break;
+        case 'zoom-reset': this.scale.resetZoom(); break;
+        case 'editor-zoom-in':
+        case 'font-larger': this.scale.zoomEditor(1); break;
+        case 'editor-zoom-out':
+        case 'font-smaller': this.scale.zoomEditor(-1); break;
+        case 'preview-zoom-in':
+        case 'preview-larger': this.scale.zoomPreview(1); break;
+        case 'preview-zoom-out':
+        case 'preview-smaller': this.scale.zoomPreview(-1); break;
       }
     });
   }
@@ -440,6 +447,10 @@ class AppController {
 
   setMode(mode) {
     this.mode = mode;
+    if (this.scale) {
+      if (mode === 'edit') this.scale.activePane = 'editor';
+      else if (mode === 'read') this.scale.activePane = 'preview';
+    }
     document.querySelectorAll('.segmented-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`mode-btn-${mode}`).classList.add('active');
 
