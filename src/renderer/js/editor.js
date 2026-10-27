@@ -13,8 +13,12 @@ class HistoryManager {
     this.editor = editor;
     this.undoStack = [];
     this.redoStack = [];
-    this.maxStackSize = 250;
+    this.maxStackSize = 1000; // 支持高达 1000 步深层撤销
+    this.lastSavedState = null;
+    this.prevInputText = '';
     this.typingTimer = null;
+    this.lastActionType = null;
+    this.chunkCount = 0;
     this.isApplying = false;
   }
 
@@ -34,41 +38,108 @@ class HistoryManager {
       clearTimeout(this.typingTimer);
       this.typingTimer = null;
     }
-    this.undoStack.push({
-      text: initialText || '',
+    const text = initialText || '';
+    this.prevInputText = text;
+    this.lastSavedState = {
+      text: text,
       start: 0,
       end: 0,
       time: Date.now()
-    });
+    };
+    this.lastActionType = null;
+    this.chunkCount = 0;
   }
 
-  pushSnapshot(snap = null) {
+  // 立即将最近未归档的编辑点压入撤销栈
+  commitCheckpoint(snap = null) {
     if (this.isApplying) return;
     if (this.typingTimer) {
       clearTimeout(this.typingTimer);
       this.typingTimer = null;
     }
+
     const current = snap || this.getSnapshot();
-    if (this.undoStack.length > 0) {
-      const top = this.undoStack[this.undoStack.length - 1];
-      if (top.text === current.text) return; // 内容无变动时不重复压栈
+
+    // 如果内容与上一状态完全相同，仅校准光标
+    if (this.lastSavedState && this.lastSavedState.text === current.text) {
+      this.lastSavedState.start = current.start;
+      this.lastSavedState.end = current.end;
+      return;
     }
-    this.undoStack.push(current);
-    if (this.undoStack.length > this.maxStackSize) {
-      this.undoStack.shift();
+
+    if (this.lastSavedState) {
+      this.undoStack.push(this.lastSavedState);
+      if (this.undoStack.length > this.maxStackSize) {
+        this.undoStack.shift();
+      }
     }
+
+    this.lastSavedState = current;
+    this.prevInputText = current.text;
     this.redoStack = []; // 产生新编辑时清空重做栈
+    this.chunkCount = 0;
+    this.lastActionType = null;
+  }
+
+  // 兼容调用接口
+  pushSnapshot(snap = null) {
+    this.commitCheckpoint(snap);
   }
 
   recordTyping() {
     if (this.isApplying) return;
+    this.redoStack = []; // 击键输入产生新编辑，清空重做分支
+
+    const currentText = this.editor.textarea.value;
+    const currentSel = [this.editor.textarea.selectionStart, this.editor.textarea.selectionEnd];
+    const prevText = this.prevInputText !== undefined ? this.prevInputText : (this.lastSavedState ? this.lastSavedState.text : '');
+
+    const lenDiff = currentText.length - prevText.length;
+    const actionType = lenDiff >= 0 ? 'insert' : 'delete';
+
+    // 1. 如果操作模式从输入转为删除，或从删除转为输入，立即将上一模式阶段归档为独立撤销点
+    if (this.lastActionType && this.lastActionType !== actionType) {
+      this.commitCheckpoint({
+        text: prevText,
+        start: currentSel[0],
+        end: currentSel[1],
+        time: Date.now()
+      });
+      this.prevInputText = currentText;
+    }
+    this.lastActionType = actionType;
+
+    // 2. 如果是大段文字变动（如粘贴、自动续写或多字符删除）或包含换行
+    if (Math.abs(lenDiff) > 1 || (currentText.includes('\n') && !prevText.includes('\n'))) {
+      this.commitCheckpoint();
+      return;
+    }
+
+    // 3. 检查是否键入了标点、空格、换行等自然分词边界
+    const lastChar = currentText.slice(currentSel[0] - 1, currentSel[0]);
+    const delimiters = new Set([' ', '\t', '\n', ',', '.', '!', '?', ';', ':', '，', '。', '！', '？', '；', '：', '、', '”', '’', '）', '】', '》', ')', ']', '}', '>', '`']);
+    if (delimiters.has(lastChar)) {
+      this.commitCheckpoint();
+      return;
+    }
+
+    // 4. 连续输入较长内容时（每 12 个字符）自动建立一个中间撤销检查点
+    this.chunkCount = (this.chunkCount || 0) + 1;
+    if (this.chunkCount >= 12) {
+      this.commitCheckpoint();
+      return;
+    }
+
+    // 记录本次击键后的文本，以便下一次按键对比增量
+    this.prevInputText = currentText;
+
+    // 5. 常规打字停顿防抖（350ms）
     if (this.typingTimer) {
       clearTimeout(this.typingTimer);
     }
-    // 打字停顿 450ms 时将当前词组作为一个独立撤销节点归档
     this.typingTimer = setTimeout(() => {
-      this.pushSnapshot();
-    }, 450);
+      this.commitCheckpoint();
+    }, 350);
   }
 
   undo() {
@@ -76,21 +147,29 @@ class HistoryManager {
       clearTimeout(this.typingTimer);
       this.typingTimer = null;
     }
-    if (this.undoStack.length === 0) return false;
 
     const current = this.getSnapshot();
-    let prev = this.undoStack.pop();
 
-    // 若栈顶状态与当前完全一致，再向前追溯一个状态
-    if (prev && prev.text === current.text && this.undoStack.length > 0) {
-      this.redoStack.push(current);
-      prev = this.undoStack.pop();
-    } else {
-      this.redoStack.push(current);
+    // 如果当前编辑器内的内容尚未归档为 checkpoint，先将其作为最新状态存入
+    if (this.lastSavedState && current.text !== this.lastSavedState.text) {
+      this.undoStack.push(this.lastSavedState);
+      this.lastSavedState = current;
     }
 
-    if (!prev) return false;
-    this.apply(prev);
+    if (this.undoStack.length === 0) return false;
+
+    // 将当前状态移入 redoStack
+    if (this.lastSavedState) {
+      this.redoStack.push(this.lastSavedState);
+    }
+
+    const prevState = this.undoStack.pop();
+    this.lastSavedState = prevState;
+    this.prevInputText = prevState.text;
+    this.chunkCount = 0;
+    this.lastActionType = null;
+
+    this.apply(prevState);
     return true;
   }
 
@@ -99,14 +178,21 @@ class HistoryManager {
       clearTimeout(this.typingTimer);
       this.typingTimer = null;
     }
+
     if (this.redoStack.length === 0) return false;
 
-    const current = this.getSnapshot();
-    this.undoStack.push(current);
+    // 将当前状态压回 undoStack
+    if (this.lastSavedState) {
+      this.undoStack.push(this.lastSavedState);
+    }
 
-    const next = this.redoStack.pop();
-    if (!next) return false;
-    this.apply(next);
+    const nextState = this.redoStack.pop();
+    this.lastSavedState = nextState;
+    this.prevInputText = nextState.text;
+    this.chunkCount = 0;
+    this.lastActionType = null;
+
+    this.apply(nextState);
     return true;
   }
 
@@ -117,6 +203,7 @@ class HistoryManager {
       this.editor.rebuildLineStarts();
       this.editor.updateGutter();
       this.editor.app.onTextChanged();
+      this.editor.textarea.focus();
     } finally {
       this.isApplying = false;
     }
@@ -192,10 +279,12 @@ class EditorController {
     const imagePaths = window.mowinAPI.imagePaths;
 
     // 监听用户键盘输入
-    this.textarea.addEventListener('input', () => {
+    this.textarea.addEventListener('input', (e) => {
       this.rebuildLineStarts();
       this.scheduleUpdateGutter();
-      this.history.recordTyping();
+      if (!this.isComposing && !(e && e.isComposing)) {
+        this.history.recordTyping();
+      }
       this.app.onTextChanged();
     });
 
@@ -205,14 +294,29 @@ class EditorController {
       this.app.onEditorScrolled();
     }, { passive: true });
 
-    // 中文输入法合成状态
+    // 中文输入法合成状态处理：输入中不记录中间拼音，候选词上屏即确立独立撤销检查点
     this.textarea.addEventListener('compositionstart', () => { this.isComposing = true; });
     this.textarea.addEventListener('compositionend', () => {
       this.isComposing = false;
       this.rebuildLineStarts();
       this.scheduleUpdateGutter();
-      this.history.recordTyping();
+      this.history.commitCheckpoint();
       this.app.onTextChanged();
+    });
+
+    // 剪切与粘贴事件监听，确保粘贴与剪切能作为独立且精确的撤销步骤
+    this.textarea.addEventListener('paste', () => {
+      this.history.commitCheckpoint();
+      setTimeout(() => {
+        this.history.commitCheckpoint();
+      }, 0);
+    });
+
+    this.textarea.addEventListener('cut', () => {
+      this.history.commitCheckpoint();
+      setTimeout(() => {
+        this.history.commitCheckpoint();
+      }, 0);
     });
 
     // 智能按键拦截处理：Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z, 回车智能续写, Tab 缩进
@@ -244,7 +348,7 @@ class EditorController {
         const smart = formatting.smartNewline(currentLine, currentLine.length);
         if (smart.handled) {
           e.preventDefault();
-          this.history.pushSnapshot(); // 记录回车前快照
+          this.history.commitCheckpoint(); // 记录回车前快照
 
           if (smart.exitList) {
             // 退出空列表项：删除当前行的列表符号并换行
@@ -259,7 +363,7 @@ class EditorController {
           this.rebuildLineStarts();
           this.updateGutter();
           this.app.onTextChanged();
-          this.history.pushSnapshot(); // 记录回车后快照
+          this.history.commitCheckpoint(); // 记录回车后快照
           return;
         }
       }
@@ -267,7 +371,7 @@ class EditorController {
       // 3. Tab 缩进 (2 个空格 / 多行选区整行缩进)
       else if (e.key === 'Tab') {
         e.preventDefault();
-        this.history.pushSnapshot(); // 记录缩进前快照
+        this.history.commitCheckpoint(); // 记录缩进前快照
         const selStart = this.textarea.selectionStart;
         const selEnd = this.textarea.selectionEnd;
         if (e.shiftKey) {
@@ -280,14 +384,18 @@ class EditorController {
         this.rebuildLineStarts();
         this.updateGutter();
         this.app.onTextChanged();
-        this.history.pushSnapshot(); // 记录缩进后快照
+        this.history.commitCheckpoint(); // 记录缩进后快照
         return;
       }
     });
 
-    // 选区变化触发浮动快捷菜单
+    // 选区变化触发浮动快捷菜单并校准无编辑时光标位置
     const onSelectChange = () => {
       if (this.isComposing) return;
+      if (this.history.lastSavedState && this.history.lastSavedState.text === this.textarea.value) {
+        this.history.lastSavedState.start = this.textarea.selectionStart;
+        this.history.lastSavedState.end = this.textarea.selectionEnd;
+      }
       this.app.onSelectionChanged();
     };
     this.textarea.addEventListener('mouseup', onSelectChange);
