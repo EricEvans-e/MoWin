@@ -144,6 +144,15 @@
   box-shadow: var(--shadow-sm);
 }
 
+#preview-viewport img.broken-image {
+  outline: 1.5px dashed var(--color-border);
+  min-height: 40px;
+  background-color: rgba(128, 128, 128, 0.06);
+  cursor: help;
+  display: inline-block;
+  padding: 4px 8px;
+}
+
 #preview-viewport table {
   border-collapse: collapse;
   display: block;

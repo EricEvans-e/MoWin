@@ -88,11 +88,12 @@ class AppController {
       const files = Array.from(e.dataTransfer.files || []);
       if (!files.length) return;
       const first = files[0];
-      const ext = window.mowinAPI.path.extname(first.name || first.path).toLowerCase();
+      const filePath = (window.mowinAPI.getPathForFile ? window.mowinAPI.getPathForFile(first) : first.path) || '';
+      const ext = window.mowinAPI.path.extname(first.name || filePath).toLowerCase();
       const mdExts = ['.md', '.markdown', '.mdown', '.mkd', '.mmd', '.txt'];
-      if (mdExts.includes(ext)) {
+      if (mdExts.includes(ext) && filePath) {
         e.preventDefault();
-        await this.openDocumentPath(first.path);
+        await this.openDocumentPath(filePath);
       }
     });
 
@@ -270,6 +271,21 @@ class AppController {
   }
 
   /**
+   * 将 Windows 本地文件绝对路径转换为符合 Chromium WHATWG URL 规范的 mowin-resource:// 协议链接
+   */
+  toResourceUrl(filePath) {
+    if (!filePath) return '';
+    const norm = filePath.replace(/\\/g, '/');
+    const parts = norm.split('/').map((seg, idx) => {
+      if (idx === 0 && /^[a-zA-Z]:$/.test(seg)) {
+        return seg;
+      }
+      return encodeURIComponent(seg);
+    }).join('/');
+    return `mowin-resource://local/${parts}`;
+  }
+
+  /**
    * 渲染预览区与公式排版
    */
   async renderPreview() {
@@ -289,15 +305,28 @@ class AppController {
     for (const img of imgEls) {
       const src = img.getAttribute('src');
       if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-        let cleanSrc = src.trim();
+        let cleanSrc = src.trim().replace(/^<|>$/g, '');
+        const queryIdx = cleanSrc.search(/[?#]/);
+        let extra = '';
+        if (queryIdx !== -1) {
+          extra = cleanSrc.slice(queryIdx);
+          cleanSrc = cleanSrc.slice(0, queryIdx);
+        }
         try { cleanSrc = decodeURIComponent(cleanSrc); } catch (e) {}
+
         let absImgPath = cleanSrc;
         if (docDir && !window.mowinAPI.path.isAbsolute(cleanSrc)) {
           absImgPath = window.mowinAPI.path.resolve(docDir, cleanSrc);
         }
-        img.src = `mowin-resource:///${encodeURIComponent(absImgPath.replace(/\\/g, '/'))}`;
+
+        img.src = this.toResourceUrl(absImgPath) + extra;
         img.addEventListener('error', () => {
-          img.title = `[无法加载图片: ${cleanSrc}] 请检查文件路径是否存在：${absImgPath}`;
+          img.classList.add('broken-image');
+          if (!docDir) {
+            img.title = `[未保存文档] 相对图片 “${cleanSrc}” 需先保存此 Markdown 文件或打开对应工作区文件夹方可自动定位`;
+          } else {
+            img.title = `[无法加载图片: ${cleanSrc}] 目标文件不存在：\n${absImgPath}`;
+          }
         });
       }
       img.addEventListener('load', () => {

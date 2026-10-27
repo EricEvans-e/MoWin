@@ -301,12 +301,15 @@ class EditorController {
     this.textarea.addEventListener('drop', (e) => {
       e.preventDefault();
       const files = Array.from(e.dataTransfer.files || []);
-      const imgFiles = files.filter(f => imagePaths.isImage(f.path));
-      if (!imgFiles.length) return;
+      const filePaths = files.map(f => {
+        return (window.mowinAPI.getPathForFile ? window.mowinAPI.getPathForFile(f) : f.path) || '';
+      }).filter(Boolean);
+      const imgPaths = filePaths.filter(p => imagePaths.isImage(p));
+      if (!imgPaths.length) return;
 
       this.history.pushSnapshot();
       const docPath = this.app.currentFilePath;
-      const mdImages = imgFiles.map(f => imagePaths.markdown(f.path, docPath)).join('\n');
+      const mdImages = imgPaths.map(p => imagePaths.markdown(p, docPath)).join('\n');
       this.insertAtCursor('\n' + mdImages + '\n');
       this.updateGutter();
       this.app.onTextChanged();

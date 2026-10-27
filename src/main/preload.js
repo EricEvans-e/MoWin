@@ -3,7 +3,7 @@
  * 将核心排版、格式化算法及受控 IPC 通信安全暴露给渲染进程
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const path = require('path');
 const Markdown = require('../common/markdown');
 const LaTeX = require('../common/latex');
@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld('mowinAPI', {
   imagePaths: {
     isImage: (filePath) => ImagePaths.isImage(filePath),
     markdown: (imagePath, documentPath, alt) => ImagePaths.markdown(imagePath, documentPath, alt)
+  },
+  getPathForFile: (file) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch (e) {}
+    return (file && file.path) ? file.path : '';
   },
   path: {
     basename: (filePath, ext) => path.basename(filePath, ext),
