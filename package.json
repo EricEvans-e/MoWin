@@ -7,8 +7,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node test/self-tests.js",
-    "test:e2e": "electron test/test-scale-shortcuts.js && electron test/test-ux-regressions.js && electron test/test-optimizations.js && electron test/ui-interaction-test.js",
-    "test:all": "node test/self-tests.js && electron test/test-scale-shortcuts.js && electron test/test-ux-regressions.js && electron test/test-optimizations.js && electron test/ui-interaction-test.js"
+    "test:e2e": "electron test/test-contextmenu-selection.js && electron test/test-scale-shortcuts.js && electron test/test-ux-regressions.js && electron test/test-optimizations.js && electron test/ui-interaction-test.js",
+    "test:all": "node test/self-tests.js && electron test/test-contextmenu-selection.js && electron test/test-scale-shortcuts.js && electron test/test-ux-regressions.js && electron test/test-optimizations.js && electron test/ui-interaction-test.js"
   },
   "keywords": [
     "markdown",

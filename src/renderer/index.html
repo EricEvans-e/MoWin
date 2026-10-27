@@ -138,8 +138,15 @@
       </div>
     </div>
 
-    <!-- 选区浮动菜单 -->
+    <!-- 选区浮动菜单 (右键呼出) -->
     <div id="selection-popover">
+      <div class="popover-row-actions">
+        <button id="popover-btn-cut" class="popover-mini-btn" title="剪切 (Ctrl+X)">剪切</button>
+        <button id="popover-btn-copy" class="popover-mini-btn" title="复制 (Ctrl+C)">复制</button>
+        <button id="popover-btn-paste" class="popover-mini-btn" title="粘贴 (Ctrl+V)">粘贴</button>
+      </div>
+      <div class="popover-divider"></div>
+
       <button id="popover-btn-formula" class="popover-btn formula-action" style="display: none;">
         <svg viewBox="0 0 24 24"><path d="M4.5 4h15v2h-13v4h11v2h-11v6h13v2h-15V4z"/></svg>
         <span>转换公式</span>

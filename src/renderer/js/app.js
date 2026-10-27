@@ -280,7 +280,7 @@ class AppController {
   }
 
   onSelectionChanged() {
-    this.selectionPopover.scheduleShow();
+    this.selectionPopover.hide();
     this.scheduleStatusUpdate();
   }
 

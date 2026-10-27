@@ -17,6 +17,9 @@ class SelectionPopoverController {
   }
 
   initElements() {
+    this.cutBtn = this.popover.querySelector('#popover-btn-cut');
+    this.copyBtn = this.popover.querySelector('#popover-btn-copy');
+    this.pasteBtn = this.popover.querySelector('#popover-btn-paste');
     this.formulaBtn = this.popover.querySelector('#popover-btn-formula');
     this.boldBtn = this.popover.querySelector('#popover-btn-bold');
     this.regularBtn = this.popover.querySelector('#popover-btn-regular');
@@ -29,7 +32,10 @@ class SelectionPopoverController {
     this.listBtn = this.popover.querySelector('#popover-btn-list');
     this.orderedListBtn = this.popover.querySelector('#popover-btn-ordered-list');
 
-    // 绑定点击事件
+    // 绑定剪贴板与格式化点击事件
+    if (this.cutBtn) this.cutBtn.addEventListener('click', () => this.onCut());
+    if (this.copyBtn) this.copyBtn.addEventListener('click', () => this.onCopy());
+    if (this.pasteBtn) this.pasteBtn.addEventListener('click', () => this.onPaste());
     this.formulaBtn.addEventListener('click', () => this.onConvertFormula());
     this.boldBtn.addEventListener('click', () => this.onBold());
     this.regularBtn.addEventListener('click', () => this.onRegular());
@@ -42,9 +48,25 @@ class SelectionPopoverController {
     this.listBtn.addEventListener('click', () => this.onInsertAfter('\n\n- 列表项\n- 列表项\n\n'));
     this.orderedListBtn.addEventListener('click', () => this.onInsertAfter('\n\n1. 列表项\n2. 列表项\n\n'));
 
-    // 记录鼠标抬起时的坐标，精准吸附选区旁边
+    // 记录鼠标抬起时的坐标
     this.app.editor.textarea.addEventListener('mouseup', (e) => {
       this.lastMousePos = { x: e.clientX, y: e.clientY };
+    });
+
+    // 核心优化：鼠标左键多选后不自动弹窗，而是通过点击右键呼出菜单
+    this.app.editor.textarea.addEventListener('contextmenu', (e) => {
+      const textarea = this.app.editor.textarea;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+
+      // 仅在有选中文本且不在阅读模式时，阻止默认系统菜单并弹出定制选区菜单
+      if (start !== end && this.app.mode !== 'read') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showAt(e.clientX, e.clientY);
+      } else {
+        this.hide();
+      }
     });
 
     // 点击其他空白区域关闭
@@ -56,23 +78,11 @@ class SelectionPopoverController {
   }
 
   scheduleShow() {
+    // 选区变化时不自动弹出菜单，由右键点击触发
     if (this.showTimer) clearTimeout(this.showTimer);
-    const textarea = this.app.editor.textarea;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-
-    // 仅在有选中文本且非阅读模式下显示
-    if (start === end || this.app.mode === 'read') {
-      this.hide();
-      return;
-    }
-
-    this.showTimer = setTimeout(() => {
-      this.show();
-    }, 180);
   }
 
-  show() {
+  showAt(clientX, clientY) {
     const textarea = this.app.editor.textarea;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
@@ -94,33 +104,27 @@ class SelectionPopoverController {
 
     this.headingSelect.value = '';
 
-    // 精确吸附在鼠标点击或选区右下方
     const popoverWidth = 210;
-    const popoverHeight = convertedFormula ? 410 : 375;
+    const popoverHeight = convertedFormula ? 430 : 395;
 
-    let targetX, targetY;
-    const coords = this.app.editor.getCoordinatesAtOffset ? this.app.editor.getCoordinatesAtOffset(end) : null;
-    const textareaRect = textarea.getBoundingClientRect();
-
-    if (coords && coords.y >= textareaRect.top - 50 && coords.y <= textareaRect.bottom + 50) {
-      targetX = Math.max(textareaRect.left + 10, Math.min(textareaRect.right - 20, coords.x + 10));
-      targetY = Math.max(textareaRect.top + 10, Math.min(textareaRect.bottom - 20, coords.y + 18));
-    } else {
-      targetX = this.lastMousePos.x + 15;
-      targetY = this.lastMousePos.y + 15;
-    }
+    let targetX = clientX + 4;
+    let targetY = clientY + 4;
 
     // 边界检测
     if (targetX + popoverWidth > window.innerWidth - 10) {
-      targetX = Math.max(10, targetX - popoverWidth - 20);
+      targetX = Math.max(10, clientX - popoverWidth - 6);
     }
-    if (targetY + popoverHeight > window.innerHeight - 35) {
-      targetY = Math.max(50, window.innerHeight - popoverHeight - 35);
+    if (targetY + popoverHeight > window.innerHeight - 30) {
+      targetY = Math.max(30, window.innerHeight - popoverHeight - 30);
     }
 
     this.popover.style.left = `${Math.max(10, targetX)}px`;
-    this.popover.style.top = `${Math.max(50, targetY)}px`;
+    this.popover.style.top = `${Math.max(30, targetY)}px`;
     this.popover.style.display = 'flex';
+  }
+
+  show() {
+    this.showAt(this.lastMousePos.x, this.lastMousePos.y);
   }
 
   hide() {
@@ -128,6 +132,38 @@ class SelectionPopoverController {
     this.popover.style.display = 'none';
     this.selectedRange = { start: 0, end: 0 };
     this.selectedText = '';
+  }
+
+  onCut() {
+    const text = this.selectedText;
+    navigator.clipboard.writeText(text);
+    this.app.editor.applyEdit({
+      range: [this.selectedRange.start, this.selectedRange.end],
+      replacement: '',
+      selection: [this.selectedRange.start, this.selectedRange.start]
+    });
+    this.hide();
+    this.app.editor.textarea.focus();
+  }
+
+  onCopy() {
+    navigator.clipboard.writeText(this.selectedText);
+    this.hide();
+    this.app.editor.textarea.focus();
+  }
+
+  async onPaste() {
+    try {
+      const clip = await navigator.clipboard.readText();
+      if (!clip) return;
+      this.app.editor.applyEdit({
+        range: [this.selectedRange.start, this.selectedRange.end],
+        replacement: clip,
+        selection: [this.selectedRange.start + clip.length, this.selectedRange.start + clip.length]
+      });
+    } catch (e) {}
+    this.hide();
+    this.app.editor.textarea.focus();
   }
 
   onConvertFormula() {

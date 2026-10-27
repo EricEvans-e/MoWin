@@ -637,6 +637,32 @@ html, body {
   user-select: none;
 }
 
+.popover-row-actions {
+  display: flex;
+  gap: 4px;
+  padding: 2px 2px 4px 2px;
+}
+
+.popover-mini-btn {
+  flex: 1;
+  padding: 5px 0;
+  text-align: center;
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 550;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.popover-mini-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .popover-btn {
   display: flex;
   align-items: center;
