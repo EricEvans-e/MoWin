@@ -23,6 +23,7 @@ class AppController {
 
   initDOM() {
     this.editorContainer = document.getElementById('editor-container');
+    this.previewPane = document.getElementById('preview-pane');
     this.previewContainer = document.getElementById('preview-container');
     this.previewViewport = document.getElementById('preview-viewport');
     this.paneDivider = document.getElementById('pane-divider');
@@ -149,8 +150,10 @@ class AppController {
       const minWidth = 240;
       const maxWidth = splitRect.width - minWidth;
       if (offset >= minWidth && offset <= maxWidth) {
+        this.savedSplitWidth = offset;
         this.editorContainer.style.flex = 'none';
         this.editorContainer.style.width = `${offset}px`;
+        if (this.previewPane) this.previewPane.style.flex = '1';
         this.previewContainer.style.flex = '1';
       }
     });
@@ -254,6 +257,7 @@ class AppController {
   }
 
   onTextChanged() {
+    this.selectionPopover.hide();
     this.isModified = true;
     this.updateTitleAndStatus();
     this.scheduleRender();
@@ -441,6 +445,7 @@ class AppController {
 
     if (mode === 'edit') {
       this.editorContainer.classList.remove('hidden');
+      if (this.previewPane) this.previewPane.classList.add('hidden');
       this.previewContainer.classList.add('hidden');
       this.paneDivider.style.display = 'none';
       this.editorContainer.style.flex = '1';
@@ -448,16 +453,31 @@ class AppController {
       this.editor.textarea.focus();
     } else if (mode === 'read') {
       this.editorContainer.classList.add('hidden');
+      if (this.previewPane) {
+        this.previewPane.classList.remove('hidden');
+        this.previewPane.style.flex = '1';
+        this.previewPane.style.width = 'auto';
+      }
       this.previewContainer.classList.remove('hidden');
       this.paneDivider.style.display = 'none';
       this.previewContainer.style.flex = '1';
     } else {
       // split
       this.editorContainer.classList.remove('hidden');
+      if (this.previewPane) {
+        this.previewPane.classList.remove('hidden');
+        this.previewPane.style.flex = '1';
+      }
       this.previewContainer.classList.remove('hidden');
       this.paneDivider.style.display = 'block';
-      this.editorContainer.style.flex = '1';
-      this.editorContainer.style.width = 'auto';
+      if (this.savedSplitWidth) {
+        this.editorContainer.style.flex = 'none';
+        this.editorContainer.style.width = `${this.savedSplitWidth}px`;
+      } else {
+        this.editorContainer.style.flex = '1';
+        this.editorContainer.style.width = 'auto';
+      }
+      if (this.previewPane) this.previewPane.style.flex = '1';
       this.previewContainer.style.flex = '1';
       this.editor.textarea.focus();
     }
@@ -531,7 +551,7 @@ class AppController {
   }
 
   async openDocumentPath(filePath) {
-    if (this.isModified && this.currentFilePath !== filePath) {
+    if (this.isModified) {
       const decision = await this.promptSaveUnsaved();
       if (decision === 'cancel') return;
       if (decision === 'save') {
@@ -542,13 +562,19 @@ class AppController {
 
     const res = await window.mowinAPI.readFile(filePath);
     if (!res.success) {
+      if (res.alreadyOpen) {
+        // 已在另一窗口激活，无需报错
+        return;
+      }
       alert('读取文件失败: ' + res.error);
       return;
     }
 
     this.currentFilePath = filePath;
     this.currentEncoding = res.encoding;
+    this.currentHasBOM = Boolean(res.hasBOM);
     this.currentLineEnding = res.lineEnding;
+    this.currentMtime = res.mtime;
     this.isModified = false;
 
     this.editor.setValue(res.content, [0, 0]);
@@ -566,11 +592,20 @@ class AppController {
     if (!this.currentFilePath) {
       return this.saveAs();
     }
-    const content = this.editor.textarea.value;
-    const res = await window.mowinAPI.writeFile(this.currentFilePath, content, this.currentEncoding, this.currentLineEnding);
+    const contentToSave = this.editor.textarea.value;
+    const res = await window.mowinAPI.writeFile(
+      this.currentFilePath,
+      contentToSave,
+      this.currentEncoding,
+      this.currentLineEnding,
+      this.currentHasBOM
+    );
     if (res.success) {
-      this.isModified = false;
-      this.updateTitleAndStatus();
+      // 消除竞态条件：仅当当前编辑器内容与刚刚落盘内容一致时才标记已保存
+      if (this.editor.textarea.value === contentToSave) {
+        this.isModified = false;
+        this.updateTitleAndStatus();
+      }
 
       // 保存成功视觉反馈
       const saveSpan = this.saveBtn.querySelector('span');
@@ -589,17 +624,42 @@ class AppController {
     const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath) : '未命名.md';
     const filePath = await window.mowinAPI.saveFileDialog(defaultName);
     if (!filePath) return false;
+
+    const prevPath = this.currentFilePath;
     this.currentFilePath = filePath;
     const saved = await this.saveFile();
     if (saved) {
       await this.renderPreview(); // 刷新基准目录以加载相对路径图片
+      return true;
+    } else {
+      this.currentFilePath = prevPath; // 保存失败时回滚路径
+      return false;
     }
-    return saved;
   }
 
   async saveUTF8() {
+    const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath) : '未命名.md';
+    const filePath = await window.mowinAPI.saveFileDialog(defaultName);
+    if (!filePath) return false;
+
+    const prevPath = this.currentFilePath;
+    const prevEncoding = this.currentEncoding;
+    const prevBOM = this.currentHasBOM;
+
+    this.currentFilePath = filePath;
     this.currentEncoding = 'utf8';
-    return await this.saveAs();
+    this.currentHasBOM = false;
+
+    const saved = await this.saveFile();
+    if (saved) {
+      await this.renderPreview();
+      return true;
+    } else {
+      this.currentFilePath = prevPath;
+      this.currentEncoding = prevEncoding;
+      this.currentHasBOM = prevBOM;
+      return false;
+    }
   }
 
   async revertSaved() {
@@ -612,6 +672,12 @@ class AppController {
   }
 
   async exportHTML() {
+    if (this.renderTimer) {
+      clearTimeout(this.renderTimer);
+      this.renderTimer = null;
+      await this.renderPreview();
+    }
+
     const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath, window.mowinAPI.path.extname(this.currentFilePath)) : '文档';
 
     // 克隆当前预览容器，进行无损离线便携化处理
@@ -662,6 +728,15 @@ class AppController {
   }
 
   async openSample() {
+    if (this.isModified) {
+      const decision = await this.promptSaveUnsaved();
+      if (decision === 'cancel') return;
+      if (decision === 'save') {
+        const saved = await this.saveFile();
+        if (!saved) return;
+      }
+    }
+
     const sampleText = `# 墨窗 · 专注于纯粹写作与排版
 
 一窗幽墨，一点专注。欢迎使用为你精心打造的 Windows Markdown 阅读与编辑器。
@@ -753,8 +828,10 @@ $$
 `;
     this.currentFilePath = null;
     this.currentEncoding = 'utf8';
+    this.currentHasBOM = false;
     this.currentLineEnding = '\r\n';
     this.isModified = false;
+    await window.mowinAPI.clearWindowFile();
     this.editor.setValue(sampleText, [0, 0]);
     this.editor.rebuildLineStarts();
     this.editor.updateGutter();
@@ -770,6 +847,7 @@ $$
 
     this.titleDisplay.textContent = `${fileName}${dirtyMarker}`;
     window.mowinAPI.setWindowTitle(fullTitle);
+    window.mowinAPI.setDirtyState(this.isModified);
     this.updateStatusLine();
   }
 

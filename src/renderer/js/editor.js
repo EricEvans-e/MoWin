@@ -264,15 +264,20 @@ class EditorController {
         }
       }
 
-      // 3. Tab 缩进 (2 个空格)
+      // 3. Tab 缩进 (2 个空格 / 多行选区整行缩进)
       else if (e.key === 'Tab') {
         e.preventDefault();
         this.history.pushSnapshot(); // 记录缩进前快照
+        const selStart = this.textarea.selectionStart;
+        const selEnd = this.textarea.selectionEnd;
         if (e.shiftKey) {
           this.unindentSelectedLines();
+        } else if (selStart !== selEnd) {
+          this.indentSelectedLines();
         } else {
           this.insertAtCursor('  ');
         }
+        this.rebuildLineStarts();
         this.updateGutter();
         this.app.onTextChanged();
         this.history.pushSnapshot(); // 记录缩进后快照
@@ -286,10 +291,9 @@ class EditorController {
       this.app.onSelectionChanged();
     };
     this.textarea.addEventListener('mouseup', onSelectChange);
+    this.textarea.addEventListener('select', onSelectChange);
     this.textarea.addEventListener('keyup', (e) => {
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
-        onSelectChange();
-      }
+      onSelectChange();
     });
 
     // 拖拽文件进入编辑区直接插入图片
@@ -348,6 +352,53 @@ class EditorController {
     this.updateGutter();
     this.app.onTextChanged();
     this.history.pushSnapshot(); // 记录格式修改后快照
+  }
+
+  getCoordinatesAtOffset(offset) {
+    if (!this.mirror) return null;
+    this.syncMirrorStyles();
+    const text = this.textarea.value;
+    const clampedOffset = Math.max(0, Math.min(offset, text.length));
+    const before = text.slice(0, clampedOffset);
+
+    const measurer = document.createElement('div');
+    measurer.style.cssText = this.mirror.style.cssText;
+    measurer.style.height = 'auto';
+    measurer.textContent = before;
+    const span = document.createElement('span');
+    span.textContent = '\u200b';
+    measurer.appendChild(span);
+    document.body.appendChild(measurer);
+
+    const textareaRect = this.textarea.getBoundingClientRect();
+    const spanRect = span.getBoundingClientRect();
+    const measurerRect = measurer.getBoundingClientRect();
+
+    const relX = spanRect.left - measurerRect.left;
+    const relY = spanRect.top - measurerRect.top;
+
+    document.body.removeChild(measurer);
+
+    return {
+      x: textareaRect.left + relX - this.textarea.scrollLeft,
+      y: textareaRect.top + relY - this.textarea.scrollTop
+    };
+  }
+
+  indentSelectedLines() {
+    const text = this.textarea.value;
+    const start = this.textarea.selectionStart;
+    const end = this.textarea.selectionEnd;
+    let lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    let lineEnd = text.indexOf('\n', end);
+    if (lineEnd === -1) lineEnd = text.length;
+
+    const block = text.slice(lineStart, lineEnd);
+    const lines = block.split('\n');
+    const newLines = lines.map(line => '  ' + line);
+
+    const replacement = newLines.join('\n');
+    this.setValue(text.slice(0, lineStart) + replacement + text.slice(lineEnd), [lineStart, lineStart + replacement.length]);
   }
 
   unindentSelectedLines() {

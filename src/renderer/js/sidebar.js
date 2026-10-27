@@ -91,13 +91,23 @@ class SidebarController {
       item.dataset.index = idx.toString();
       item.textContent = heading.title || `第 ${heading.line} 行标题`;
       item.title = `${heading.title} (第 ${heading.line} 行)`;
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
 
-      item.addEventListener('click', () => {
+      const selectHeading = () => {
         // 编辑区跳转到该行
         this.app.editor.scrollToLine(heading.line);
         // 预览区平滑滚动到锚点
         this.app.scrollToHeading(idx);
         this.setActiveHeading(idx);
+      };
+
+      item.addEventListener('click', selectHeading);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectHeading();
+        }
       });
 
       this.contentEl.appendChild(item);
@@ -175,9 +185,20 @@ class SidebarController {
       item.textContent = relPath;
       item.title = filePath;
 
-      item.addEventListener('click', () => {
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+
+      const selectFile = () => {
         this.app.openDocumentPath(filePath);
         this.highlightActiveFile(filePath);
+      };
+
+      item.addEventListener('click', selectFile);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectFile();
+        }
       });
 
       this.contentEl.appendChild(item);

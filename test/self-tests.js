@@ -12,6 +12,7 @@ const Markdown = require('../src/common/markdown');
 const LaTeX = require('../src/common/latex');
 const Formatting = require('../src/common/formatting');
 const ImagePaths = require('../src/common/image-paths');
+const { detectAndReadFile, saveFileWithFormat } = require('../src/common/file-io');
 
 let passedCount = 0;
 let totalCount = 0;
@@ -246,14 +247,46 @@ function runTests() {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 
-  // 6. 文件编码与换行符往返无损测试
-  const utf8Text = '# 墨窗测试\r\n中文内容 😀\r\n';
-  const utf8Buf = Buffer.from(utf8Text, 'utf8');
-  check(utf8Buf.toString('utf8') === utf8Text, 'UTF-8 中文与 CRLF 换行无损读取与保存');
+  // 6. 文件编码与换行符真实磁盘读写往返无损测试
+  const encTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mowin-enc-test-'));
+  try {
+    const utf8Content = '# 墨窗测试\n中文内容 😀\n第二行';
+    const utf8File = path.join(encTempDir, 'test-utf8.md');
+    saveFileWithFormat(utf8File, utf8Content, 'utf8', '\r\n', false);
+    const readUtf8 = detectAndReadFile(utf8File);
+    check(
+      readUtf8.content === utf8Content && readUtf8.encoding === 'utf8' && readUtf8.lineEnding === '\r\n' && !readUtf8.hasBOM,
+      '真实磁盘 UTF-8 中文与 CRLF 换行无损读取与保存'
+    );
 
-  const utf16LEText = '# UTF16 测试\r\n内容';
-  const utf16LEBuf = Buffer.from(utf16LEText, 'utf16le');
-  check(utf16LEBuf.toString('utf16le') === utf16LEText, 'UTF-16LE 编码往返正确');
+    const utf8BomFile = path.join(encTempDir, 'test-utf8-bom.md');
+    saveFileWithFormat(utf8BomFile, utf8Content, 'utf8', '\n', true);
+    const readUtf8Bom = detectAndReadFile(utf8BomFile);
+    check(
+      readUtf8Bom.content === utf8Content && readUtf8Bom.encoding === 'utf8' && readUtf8Bom.hasBOM,
+      '真实磁盘 UTF-8 带 BOM 往返正确保留 BOM'
+    );
+
+    const utf16LEContent = '# UTF16LE 测试\n多语言测试：English, 中文, 日本語';
+    const utf16LEFile = path.join(encTempDir, 'test-utf16le.md');
+    saveFileWithFormat(utf16LEFile, utf16LEContent, 'utf16le', '\r\n', true);
+    const readUtf16LE = detectAndReadFile(utf16LEFile);
+    check(
+      readUtf16LE.content === utf16LEContent && readUtf16LE.encoding === 'utf16le' && readUtf16LE.hasBOM,
+      '真实磁盘 UTF-16LE 写入与读取保留 BOM 与多语言文本'
+    );
+
+    const utf16BEContent = '# UTF16BE 测试\n大端序内容';
+    const utf16BEFile = path.join(encTempDir, 'test-utf16be.md');
+    saveFileWithFormat(utf16BEFile, utf16BEContent, 'utf16be', '\n', true);
+    const readUtf16BE = detectAndReadFile(utf16BEFile);
+    check(
+      readUtf16BE.content === utf16BEContent && readUtf16BE.encoding === 'utf16be' && readUtf16BE.hasBOM,
+      '真实磁盘 UTF-16BE 写入与读取保留 BOM 与文本完整性'
+    );
+  } finally {
+    fs.rmSync(encTempDir, { recursive: true, force: true });
+  }
 
   console.log(`\n\x1b[32m=== 全部 ${passedCount}/${totalCount} 项核心自检测试通过！===\x1b[0m`);
 }

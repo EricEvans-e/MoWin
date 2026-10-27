@@ -16,6 +16,10 @@ ipcMain.handle('app:print', () => true);
 ipcMain.handle('app:new-window', () => true);
 ipcMain.handle('app:open-external', () => true);
 ipcMain.handle('app:show-default-app-dialog', () => {});
+ipcMain.handle('app:set-dirty-state', () => true);
+ipcMain.handle('app:clear-window-file', () => true);
+ipcMain.handle('app:confirm-save-dialog', () => 'dontsave');
+ipcMain.handle('app:open-image-dialog', () => null);
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -86,16 +90,26 @@ app.whenReady().then(async () => {
       }
 
       // 6. 测试浮动选区菜单与智能 LaTeX 转换识别
-      app.editor.setValue('测试文本 \\\\( \\\\alpha + \\\\beta \\\\) 结尾', [5, 23]);
+      const fullText = '测试文本 \\\\( \\\\alpha + \\\\beta \\\\) 结尾';
+      const fStart = fullText.indexOf('\\\\(');
+      const fEnd = fullText.indexOf('\\\\)') + 3;
+      app.editor.setValue(fullText, [fStart, fEnd]);
       app.editor.rebuildLineStarts();
       app.editor.updateGutter();
       app.selectionPopover.show();
       const formulaDisplay = app.selectionPopover.formulaBtn.style.display;
-      res.push('Selection popover formula button display=' + formulaDisplay);
+      if (formulaDisplay !== 'flex') {
+        throw new Error('Formula button was not displayed, display=' + formulaDisplay);
+      }
+      res.push('Selection popover formula button display=flex (PASS)');
 
       // 执行公式转换
       app.selectionPopover.onConvertFormula();
-      res.push('Converted text in editor=' + app.editor.textarea.value);
+      const textAfterConversion = app.editor.textarea.value;
+      if (!textAfterConversion.includes('$') || textAfterConversion.includes('\\\\(')) {
+        throw new Error('Formula conversion failed, got: ' + textAfterConversion);
+      }
+      res.push('Formula converted successfully: ' + textAfterConversion + ' (PASS)');
 
       // 7. 恢复示例文档
       await app.openSample();

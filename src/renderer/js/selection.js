@@ -97,25 +97,37 @@ class SelectionPopoverController {
     // 精确吸附在鼠标点击或选区右下方
     const popoverWidth = 210;
     const popoverHeight = convertedFormula ? 410 : 375;
-    let x = this.lastMousePos.x + 15;
-    let y = this.lastMousePos.y + 15;
+
+    let targetX, targetY;
+    const coords = this.app.editor.getCoordinatesAtOffset ? this.app.editor.getCoordinatesAtOffset(end) : null;
+    const textareaRect = textarea.getBoundingClientRect();
+
+    if (coords && coords.y >= textareaRect.top - 50 && coords.y <= textareaRect.bottom + 50) {
+      targetX = Math.max(textareaRect.left + 10, Math.min(textareaRect.right - 20, coords.x + 10));
+      targetY = Math.max(textareaRect.top + 10, Math.min(textareaRect.bottom - 20, coords.y + 18));
+    } else {
+      targetX = this.lastMousePos.x + 15;
+      targetY = this.lastMousePos.y + 15;
+    }
 
     // 边界检测
-    if (x + popoverWidth > window.innerWidth - 10) {
-      x = this.lastMousePos.x - popoverWidth - 10;
+    if (targetX + popoverWidth > window.innerWidth - 10) {
+      targetX = Math.max(10, targetX - popoverWidth - 20);
     }
-    if (y + popoverHeight > window.innerHeight - 35) {
-      y = window.innerHeight - popoverHeight - 35;
+    if (targetY + popoverHeight > window.innerHeight - 35) {
+      targetY = Math.max(50, window.innerHeight - popoverHeight - 35);
     }
 
-    this.popover.style.left = `${Math.max(10, x)}px`;
-    this.popover.style.top = `${Math.max(50, y)}px`;
+    this.popover.style.left = `${Math.max(10, targetX)}px`;
+    this.popover.style.top = `${Math.max(50, targetY)}px`;
     this.popover.style.display = 'flex';
   }
 
   hide() {
     if (this.showTimer) clearTimeout(this.showTimer);
     this.popover.style.display = 'none';
+    this.selectedRange = { start: 0, end: 0 };
+    this.selectedText = '';
   }
 
   onConvertFormula() {
@@ -177,12 +189,19 @@ class SelectionPopoverController {
   }
 
   async onInsertImage() {
-    this.hide();
-    const filePath = await window.mowinAPI.openFileDialog();
-    if (!filePath) return;
+    const range = { ...this.selectedRange };
     const altText = this.selectedText || '图片';
+    this.hide();
+    const filePath = await window.mowinAPI.openImageDialog();
+    if (!filePath) return;
     const md = window.mowinAPI.imagePaths.markdown(filePath, this.app.currentFilePath, altText);
-    this.onInsertAfter('\n' + md + '\n');
+    const end = Math.max(range.start, range.end);
+    this.app.editor.applyEdit({
+      range: [end, end],
+      replacement: '\n' + md + '\n',
+      selection: [end + md.length + 2, end + md.length + 2]
+    });
+    this.app.editor.textarea.focus();
   }
 }
 

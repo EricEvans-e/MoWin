@@ -142,6 +142,8 @@ class SearchController {
   }
 
   replaceCurrent() {
+    // 替换前重新执行一次查找，保证匹配坐标与当前编辑框实际字符偏移 100% 同步
+    this.performFind();
     if (this.currentIndex < 0 || !this.matches.length) return;
     const m = this.matches[this.currentIndex];
     const replacement = this.replaceInput.value;
@@ -159,7 +161,8 @@ class SearchController {
     const replacement = this.replaceInput.value;
     const text = this.app.editor.textarea.value;
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    const newText = text.replace(regex, replacement);
+    // 使用函数返回值进行纯字面量替换，避免 $&, $1 等符号被错误解释为正则替换模板
+    const newText = text.replace(regex, () => replacement);
     if (newText === text) return;
 
     this.app.editor.history.pushSnapshot(); // 记录替换前快照

@@ -102,8 +102,12 @@
   box-shadow: var(--shadow-sm);
 }
 
-#preview-viewport pre:hover .code-copy-btn {
-  opacity: 0.9;
+#preview-viewport pre:hover .code-copy-btn,
+.code-copy-btn:focus,
+.code-copy-btn:focus-visible {
+  opacity: 0.95;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .code-copy-btn:hover {
@@ -191,7 +195,8 @@
 
 #preview-viewport input[type=checkbox] {
   accent-color: var(--accent);
-  cursor: pointer;
+  cursor: default;
+  pointer-events: none;
   margin-right: 7px;
   transform: translateY(1.5px);
 }

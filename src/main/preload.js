@@ -49,11 +49,12 @@ contextBridge.exposeInMainWorld('mowinAPI', {
 
   // 文件对话框与 I/O 操作
   openFileDialog: () => ipcRenderer.invoke('app:open-file-dialog'),
+  openImageDialog: () => ipcRenderer.invoke('app:open-image-dialog'),
   saveFileDialog: (defaultName) => ipcRenderer.invoke('app:save-file-dialog', defaultName),
   chooseFolderDialog: () => ipcRenderer.invoke('app:choose-folder-dialog'),
   confirmSaveDialog: (fileName) => ipcRenderer.invoke('app:confirm-save-dialog', fileName),
   readFile: (filePath) => ipcRenderer.invoke('app:read-file', filePath),
-  writeFile: (filePath, content, encoding, lineEnding) => ipcRenderer.invoke('app:write-file', filePath, content, encoding, lineEnding),
+  writeFile: (filePath, content, encoding, lineEnding, hasBOM) => ipcRenderer.invoke('app:write-file', filePath, content, encoding, lineEnding, hasBOM),
   listFiles: (folderPath) => ipcRenderer.invoke('app:list-files', folderPath),
   
   // 导出与打印
@@ -67,6 +68,8 @@ contextBridge.exposeInMainWorld('mowinAPI', {
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   showDefaultAppDialog: () => ipcRenderer.invoke('app:show-default-app-dialog'),
   setWindowTitle: (title) => ipcRenderer.invoke('app:set-title', title),
+  setDirtyState: (isModified) => ipcRenderer.invoke('app:set-dirty-state', isModified),
+  clearWindowFile: () => ipcRenderer.invoke('app:clear-window-file'),
   forceClose: () => ipcRenderer.invoke('app:force-close'),
   getInitialFilePath: () => ipcRenderer.invoke('app:get-initial-file'),
 

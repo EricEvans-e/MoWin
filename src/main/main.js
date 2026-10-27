@@ -33,11 +33,11 @@ protocol.registerSchemesAsPrivileged([
 const openWindows = new Map(); // windowId -> { win, filePath, docDir }
 
 function createDocumentWindow(targetFilePath = null) {
-  // 如果该文件已在某个窗口打开，则直接激活该窗口
+  // 如果该文件已在某个窗口打开，则直接激活该窗口 (Windows 大小写不敏感比对)
   if (targetFilePath) {
-    const normTarget = path.normalize(targetFilePath);
+    const normTarget = path.normalize(targetFilePath).toLowerCase();
     for (const [id, info] of openWindows.entries()) {
-      if (info.filePath && path.normalize(info.filePath) === normTarget) {
+      if (info.filePath && path.normalize(info.filePath).toLowerCase() === normTarget) {
         if (!info.win.isDestroyed()) {
           info.win.focus();
           return info.win;
@@ -197,58 +197,7 @@ function scanFolder(folderPath, maxFiles = 10000) {
   return result.sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
 
-// 检测文件编码与换行符
-function detectAndReadFile(filePath) {
-  const buf = fs.readFileSync(filePath);
-  let encoding = 'utf8';
-  let text = '';
-
-  // 检测 BOM 标记
-  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
-    encoding = 'utf16le';
-    text = buf.slice(2).toString('utf16le');
-  } else if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
-    // 简单支持 UTF-16BE (转置字节)
-    encoding = 'utf16be';
-    const swapped = Buffer.alloc(buf.length - 2);
-    for (let i = 2; i < buf.length - 1; i += 2) {
-      swapped[i - 2] = buf[i + 1];
-      swapped[i - 1] = buf[i];
-    }
-    text = swapped.toString('utf16le');
-  } else {
-    // UTF-8
-    let offset = 0;
-    if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
-      offset = 3; // UTF-8 BOM
-    }
-    encoding = 'utf8';
-    text = buf.slice(offset).toString('utf8');
-  }
-
-  // 检测换行符
-  const lineEnding = text.includes('\r\n') ? '\r\n' : (text.includes('\r') ? '\r' : '\n');
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  return {
-    content: normalized,
-    encoding,
-    lineEnding,
-    filePath
-  };
-}
-
-// 写入文件（保留编码和换行符）
-function saveFileWithFormat(filePath, content, encoding = 'utf8', lineEnding = '\n') {
-  const textWithEnding = content.replace(/\n/g, lineEnding);
-  let buf;
-  if (encoding.toLowerCase().startsWith('utf16') || encoding.toLowerCase() === 'utf-16') {
-    buf = Buffer.from(textWithEnding, 'utf16le');
-  } else {
-    buf = Buffer.from(textWithEnding, 'utf8');
-  }
-  fs.writeFileSync(filePath, buf);
-}
+const { detectAndReadFile, saveFileWithFormat } = require('../common/file-io');
 
 // 单实例锁配置与多文件关联唤起
 const gotTheLock = app.requestSingleInstanceLock();
@@ -381,8 +330,21 @@ ipcMain.handle('app:confirm-save-dialog', async (event, fileName) => {
 
 ipcMain.handle('app:read-file', async (event, filePath) => {
   try {
-    const data = detectAndReadFile(filePath);
     const win = BrowserWindow.fromWebContents(event.sender);
+    // 检查其他窗口是否已经打开了该文件 (Windows 大小写不敏感比对)
+    if (win) {
+      const normTarget = path.normalize(filePath).toLowerCase();
+      for (const [id, info] of openWindows.entries()) {
+        if (info.win && !info.win.isDestroyed() && id !== win.id) {
+          if (info.filePath && path.normalize(info.filePath).toLowerCase() === normTarget) {
+            info.win.focus();
+            return { success: false, alreadyOpen: true };
+          }
+        }
+      }
+    }
+
+    const data = detectAndReadFile(filePath);
     if (win && openWindows.has(win.id)) {
       const info = openWindows.get(win.id);
       info.filePath = filePath;
@@ -394,19 +356,34 @@ ipcMain.handle('app:read-file', async (event, filePath) => {
   }
 });
 
-ipcMain.handle('app:write-file', async (event, filePath, content, encoding, lineEnding) => {
+ipcMain.handle('app:write-file', async (event, filePath, content, encoding, lineEnding, hasBOM) => {
   try {
-    saveFileWithFormat(filePath, content, encoding, lineEnding);
+    saveFileWithFormat(filePath, content, encoding, lineEnding, hasBOM);
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win && openWindows.has(win.id)) {
       const info = openWindows.get(win.id);
       info.filePath = filePath;
       info.docDir = path.dirname(filePath);
     }
-    return { success: true };
+    const stat = fs.statSync(filePath);
+    return { success: true, mtime: stat.mtimeMs };
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('app:open-image-dialog', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: '选择本地图片文件',
+    filters: [
+      { name: '常见图片格式 (*.png;*.jpg;*.jpeg;*.webp;*.svg;*.gif;*.bmp;*.ico)', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg', 'gif', 'bmp', 'ico'] },
+      { name: '所有文件 (*.*)', extensions: ['*'] }
+    ],
+    properties: ['openFile']
+  });
+  if (canceled || !filePaths.length) return null;
+  return filePaths[0];
 });
 
 ipcMain.handle('app:list-files', async (event, folderPath) => {
@@ -525,13 +502,29 @@ ipcMain.handle('app:force-close', (event) => {
   return true;
 });
 
+ipcMain.handle('app:clear-window-file', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && openWindows.has(win.id)) {
+    const info = openWindows.get(win.id);
+    info.filePath = null;
+    info.docDir = null;
+    info.isModified = false;
+  }
+  return true;
+});
+
+ipcMain.handle('app:set-dirty-state', (event, isModified) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && openWindows.has(win.id)) {
+    const info = openWindows.get(win.id);
+    info.isModified = Boolean(isModified);
+  }
+  return true;
+});
+
 ipcMain.handle('app:set-title', (event, title) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) {
     win.setTitle(title);
-    const info = openWindows.get(win.id);
-    if (info) {
-      info.isModified = title.includes(' •');
-    }
   }
 });

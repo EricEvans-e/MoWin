@@ -34,10 +34,14 @@ ipcMain.handle('app:read-image-data-url', (event, filePath) => {
     return null;
   }
 });
+let capturedExportHtml = '';
 ipcMain.handle('app:export-html', (event, defaultName, htmlContent) => {
-  global.exportedHtml = htmlContent;
+  capturedExportHtml = htmlContent;
   return true;
 });
+ipcMain.handle('app:clear-window-file', () => true);
+ipcMain.handle('app:set-dirty-state', () => true);
+ipcMain.handle('app:open-image-dialog', () => null);
 ipcMain.handle('app:list-files', (event, folderPath) => {
   return { success: true, files: ['doc1.md', 'notes.md', 'chapter1.md'] };
 });
@@ -102,11 +106,6 @@ app.whenReady().then(async () => {
       app.editor.setValue('# 标题\\n\\n\`\`\`js\\nconst a = 1;\\n\`\`\`\\n\\n<img src="./fig1.png" data-abs-path="dummy.png" data-original-src="./fig1.png" />');
       await new Promise(r => setTimeout(r, 250));
       await app.exportHTML();
-      const exported = window.exportedHtml || '';
-      const noCopyBtn = !exported.includes('code-copy-btn');
-      const noMowinResource = !exported.includes('mowin-resource://');
-      log.push({ test: 'export_html_clean', noCopyBtn, noMowinResource });
-
       return log;
     })()
   `);
@@ -114,5 +113,29 @@ app.whenReady().then(async () => {
   console.log('=== 优化与修复验证结果 ===');
   console.log(JSON.stringify(results, null, 2));
 
-  app.quit();
+  // 严格断言
+  const assert = require('assert');
+  try {
+    const tableTest = results.find(r => r.test === 'popover_table_undo');
+    assert(tableTest && tableTest.hasTable && tableTest.undoTableOk, 'popover table undo must succeed');
+
+    const findTest = results.find(r => r.test === 'find_in_read_mode_autosplit');
+    assert(findTest && findTest.modeBeforeFind === 'read' && findTest.modeAfterFind === 'split', 'find in read mode must auto split');
+
+    const filterTest = results.find(r => r.test === 'sidebar_file_filter');
+    assert(filterTest && filterTest.renderedFiles.some(f => f.includes('notes.md')), 'sidebar file filter must match');
+
+    const zoomTest = results.find(r => r.test === 'zoom_invalidates_blocks');
+    assert(zoomTest && zoomTest.invalidated, 'zoom must invalidate scroll sync cache');
+
+    assert(capturedExportHtml.length > 0, 'Exported HTML must not be empty');
+    assert(!capturedExportHtml.includes('code-copy-btn'), 'Exported HTML must not contain code-copy-btn');
+    assert(!capturedExportHtml.includes('mowin-resource://'), 'Exported HTML must not contain mowin-resource protocol');
+
+    console.log('\n\x1b[32m=== 全部优化断言测试严格通过！===\x1b[0m\n');
+    app.exit(0);
+  } catch (err) {
+    console.error('\n\x1b[31mFAIL 断言失败:\x1b[0m', err.message);
+    app.exit(1);
+  }
 });
