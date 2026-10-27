@@ -418,22 +418,46 @@ ipcMain.handle('app:export-html', async (event, defaultName, htmlContent) => {
   }
 });
 
+function escapePdfHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 ipcMain.handle('app:print-to-pdf', async (event, optionsOrMargin) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const options = (typeof optionsOrMargin === 'object' && optionsOrMargin !== null)
     ? optionsOrMargin
     : { marginOption: optionsOrMargin };
 
-  // 页边距映射 (单位: 英寸)
-  // 正常 · 25.4 mm = 1.0 inch
-  // 较窄 · 12.7 mm = 0.5 inch
-  // 极窄 · 6.35 mm = 0.25 inch
+  // 页边距映射 (单位: 英寸) 与页眉页脚间距
+  // 正常 · 21.6 mm / 19 mm = 0.85 / 0.75 inch
+  // 较窄 · 15.2 mm / 12.7 mm = 0.6 / 0.5 inch
+  // 极窄 · 11.4 mm / 8.9 mm = 0.45 / 0.35 inch
   const marginOption = options.marginOption || 0;
-  let marginInches = 1.0;
-  if (marginOption === 1) marginInches = 0.5;
-  else if (marginOption === 2) marginInches = 0.25;
+  let topMargin = 0.85;
+  let bottomMargin = 0.85;
+  let sideMargin = 0.75;
+  let paddingMm = '18mm';
+
+  if (marginOption === 1) {
+    topMargin = 0.6;
+    bottomMargin = 0.6;
+    sideMargin = 0.5;
+    paddingMm = '12mm';
+  } else if (marginOption === 2) {
+    topMargin = 0.45;
+    bottomMargin = 0.45;
+    sideMargin = 0.35;
+    paddingMm = '9mm';
+  }
 
   const defaultName = options.defaultName || '文档.pdf';
+  const docTitle = options.title || defaultName.replace(/\.pdf$/i, '');
 
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: '存储为 PDF 文件',
@@ -442,14 +466,27 @@ ipcMain.handle('app:print-to-pdf', async (event, optionsOrMargin) => {
   });
   if (canceled || !filePath) return false;
 
+  const headerHtml = `<div style="font-size: 8pt; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #8c959f; width: 100%; padding: 0 ${paddingMm}; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; border-bottom: 0.5px solid #e1e4e8; padding-bottom: 3px;">
+    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%;">${escapePdfHtml(docTitle)}</span>
+    <span style="font-size: 7.5pt; color: #afb8c1;">墨窗 MoWin</span>
+  </div>`;
+
+  const footerHtml = `<div style="font-size: 8pt; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #8c959f; width: 100%; padding: 0 ${paddingMm}; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; border-top: 0.5px solid #e1e4e8; padding-top: 3px;">
+    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; color: #afb8c1;">${escapePdfHtml(defaultName)}</span>
+    <span style="font-variant-numeric: tabular-nums;">第 <span class="pageNumber"></span> 页 / 共 <span class="totalPages"></span> 页</span>
+  </div>`;
+
   try {
     const pdfData = await win.webContents.printToPDF({
+      displayHeaderFooter: true,
+      headerTemplate: headerHtml,
+      footerTemplate: footerHtml,
       margins: {
         marginType: 'custom',
-        top: marginInches,
-        bottom: marginInches,
-        left: marginInches,
-        right: marginInches
+        top: topMargin,
+        bottom: bottomMargin,
+        left: sideMargin,
+        right: sideMargin
       },
       printBackground: true,
       pageSize: 'A4'

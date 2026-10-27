@@ -958,15 +958,17 @@ html, body {
 
   #preview-viewport blockquote {
     background: #f8f9fa !important;
-    border-left: 4px solid #0969da !important;
-    color: #4b5563 !important;
+    border-left: 3.5px solid #2563eb !important;
+    border-radius: 4px !important;
+    color: #334155 !important;
     break-inside: avoid;
     page-break-inside: avoid;
-    padding: 8px 16px !important;
+    padding: 10px 16px !important;
+    margin: 1em 0 !important;
   }
 
   #preview-viewport blockquote p {
-    color: #4b5563 !important;
+    color: #334155 !important;
   }
 
   #preview-viewport table {
@@ -975,6 +977,14 @@ html, body {
     display: table !important;
     overflow: visible !important;
     break-inside: auto;
+  }
+
+  #preview-viewport thead {
+    display: table-header-group !important;
+  }
+
+  #preview-viewport tbody {
+    display: table-row-group !important;
   }
 
   #preview-viewport tr {
@@ -1001,6 +1011,10 @@ html, body {
     page-break-inside: avoid;
     box-shadow: none !important;
     max-width: 100% !important;
+    max-height: 480px !important;
+    object-fit: contain !important;
+    margin: 1em auto !important;
+    display: block !important;
   }
 
   #preview-viewport hr {
@@ -1017,10 +1031,5 @@ html, body {
 
   mjx-container svg path {
     fill: #111827 !important;
-  }
-
-  @page {
-    size: A4 portrait;
-    margin: 0;
   }
 }

@@ -849,9 +849,14 @@ class AppController {
       ? window.mowinAPI.path.basename(this.currentFilePath, window.mowinAPI.path.extname(this.currentFilePath))
       : (this.headings && this.headings[0] ? this.headings[0].title.slice(0, 30) : '未命名文档');
 
+    const title = (this.headings && this.headings[0] && this.headings[0].title)
+      ? this.headings[0].title
+      : defaultName;
+
     const marginOption = this.sidebar.getPdfMarginOption();
     await window.mowinAPI.printToPdf({
       marginOption: marginOption,
+      title: title,
       defaultName: `${defaultName}.pdf`
     });
   }
