@@ -75,6 +75,7 @@ class SidebarController {
     this.headings.forEach((heading, idx) => {
       const item = document.createElement('div');
       item.className = `outline-item level-${heading.level}`;
+      item.dataset.index = idx.toString();
       item.textContent = heading.title || `第 ${heading.line} 行标题`;
       item.title = `${heading.title} (第 ${heading.line} 行)`;
 
@@ -83,9 +84,22 @@ class SidebarController {
         this.app.editor.scrollToLine(heading.line);
         // 预览区平滑滚动到锚点
         this.app.scrollToHeading(idx);
+        this.setActiveHeading(idx);
       });
 
       this.contentEl.appendChild(item);
+    });
+  }
+
+  setActiveHeading(index) {
+    if (this.currentTab !== 'outline') return;
+    const items = this.contentEl.querySelectorAll('.outline-item');
+    items.forEach((item, idx) => {
+      if (idx === index) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
     });
   }
 

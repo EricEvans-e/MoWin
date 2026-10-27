@@ -218,6 +218,21 @@ class ScrollSyncEngine {
     this.app.previewContainer.scrollTop = Math.max(0, Math.min(maxScroll, targetY));
   }
 
+  updateActiveHeading(line) {
+    if (!this.app.headings || !this.app.headings.length) return;
+    let activeIdx = -1;
+    for (let i = 0; i < this.app.headings.length; i++) {
+      if (this.app.headings[i].line <= line + 0.5) {
+        activeIdx = i;
+      } else {
+        break;
+      }
+    }
+    if (activeIdx !== -1) {
+      this.app.sidebar.setActiveHeading(activeIdx);
+    }
+  }
+
   /**
    * 编辑区发生滚动时触发 (同步到预览区)
    */
@@ -237,6 +252,7 @@ class ScrollSyncEngine {
       this.isSyncingFromEditor = true;
       const linePos = this.app.editor.sourcePosition();
       this.scrollToPreviewLine(linePos);
+      this.updateActiveHeading(linePos);
 
       // 短暂阻尼防震荡
       setTimeout(() => {
@@ -266,6 +282,7 @@ class ScrollSyncEngine {
         const currentY = this.app.previewContainer.scrollTop;
         const line = this.lineAtPreviewScroll(currentY);
         this.app.editor.scrollToLine(line);
+        this.updateActiveHeading(line);
 
         setTimeout(() => {
           this.isSyncingFromPreview = false;

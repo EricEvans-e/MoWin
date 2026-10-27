@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('mowinAPI', {
   openFileDialog: () => ipcRenderer.invoke('app:open-file-dialog'),
   saveFileDialog: (defaultName) => ipcRenderer.invoke('app:save-file-dialog', defaultName),
   chooseFolderDialog: () => ipcRenderer.invoke('app:choose-folder-dialog'),
+  confirmSaveDialog: (fileName) => ipcRenderer.invoke('app:confirm-save-dialog', fileName),
   readFile: (filePath) => ipcRenderer.invoke('app:read-file', filePath),
   writeFile: (filePath, content, encoding, lineEnding) => ipcRenderer.invoke('app:write-file', filePath, content, encoding, lineEnding),
   listFiles: (folderPath) => ipcRenderer.invoke('app:list-files', folderPath),

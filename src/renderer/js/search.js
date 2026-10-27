@@ -156,8 +156,14 @@ class SearchController {
     const text = this.app.editor.textarea.value;
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     const newText = text.replace(regex, replacement);
+    if (newText === text) return;
+
+    this.app.editor.history.pushSnapshot(); // 记录替换前快照
     this.app.editor.setValue(newText, [0, 0]);
+    this.app.editor.rebuildLineStarts();
+    this.app.editor.updateGutter();
     this.app.onTextChanged();
+    this.app.editor.history.pushSnapshot(); // 记录替换后快照
     this.performFind();
   }
 }

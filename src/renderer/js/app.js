@@ -80,6 +80,29 @@ class AppController {
       }
     });
 
+    // 支持拖拽 Markdown 文件到窗口任意区域直接打开
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    window.addEventListener('drop', async (e) => {
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!files.length) return;
+      const first = files[0];
+      const ext = window.mowinAPI.path.extname(first.name || first.path).toLowerCase();
+      const mdExts = ['.md', '.markdown', '.mdown', '.mkd', '.mmd', '.txt'];
+      if (mdExts.includes(ext)) {
+        e.preventDefault();
+        await this.openDocumentPath(first.path);
+      }
+    });
+
+    // 窗口关闭前如果有未保存修改，触发系统防护提示
+    window.addEventListener('beforeunload', (e) => {
+      if (this.isModified) {
+        e.returnValue = false;
+      }
+    });
+
     window.invalidateSourceBlocks = () => {
       if (this.scrollSync) this.scrollSync.invalidateSourceBlocks();
     };
@@ -275,14 +298,45 @@ class AppController {
       });
     }
 
-    this.previewViewport.innerHTML = tempContainer.innerHTML;
+    // 注入代码块“复制”按钮
+    const preEls = tempContainer.querySelectorAll('pre');
+    for (const pre of preEls) {
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'code-copy-btn';
+      copyBtn.textContent = '复制';
+      copyBtn.title = '复制完整代码到剪贴板';
+      copyBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const codeEl = pre.querySelector('code');
+        const codeText = codeEl ? codeEl.innerText : pre.innerText;
+        try {
+          await navigator.clipboard.writeText(codeText);
+          copyBtn.textContent = '已复制 ✓';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = '复制';
+            copyBtn.classList.remove('copied');
+          }, 1500);
+        } catch (err) {
+          copyBtn.textContent = '复制失败';
+        }
+      });
+      pre.appendChild(copyBtn);
+    }
+
+    this.previewViewport.replaceChildren(...tempContainer.childNodes);
     if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
 
-    // 调度离线 MathJax SVG 排版
+    // 调度离线 MathJax SVG 排版 (带批次代际控制，快速打字自动废弃旧任务)
+    this.renderGeneration = (this.renderGeneration || 0) + 1;
+    const currentGeneration = this.renderGeneration;
+
     this.sidebar.setPdfEnabled(false);
     if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
       try {
         await window.MathJax.startup.promise;
+        if (this.renderGeneration !== currentGeneration) return;
+
         if (!document.getElementById('MJX-offline-styles')) {
           const style = window.MathJax.startup.document.outputJax.styleSheet(window.MathJax.startup.document);
           style.id = 'MJX-offline-styles';
@@ -291,6 +345,7 @@ class AppController {
 
         const mathNodes = Array.from(this.previewViewport.querySelectorAll('.mowin-math'));
         for (const node of mathNodes) {
+          if (this.renderGeneration !== currentGeneration) return;
           const tex = node.textContent;
           const isDisplay = node.dataset.display === 'true';
           try {
@@ -303,8 +358,10 @@ class AppController {
             node.title = '公式排版异常：' + err.message;
           }
         }
-        this.sidebar.setPdfEnabled(true);
-        if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+        if (this.renderGeneration === currentGeneration) {
+          this.sidebar.setPdfEnabled(true);
+          if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+        }
       } catch (err) {
         console.warn('MathJax 排版异常:', err);
       }
@@ -383,7 +440,21 @@ class AppController {
     this.setTheme(next);
   }
 
-  newDocument() {
+  async promptSaveUnsaved() {
+    const fileName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath) : '未命名.md';
+    return await window.mowinAPI.confirmSaveDialog(fileName); // 'save' | 'dont-save' | 'cancel'
+  }
+
+  async newDocument() {
+    if (this.isModified) {
+      const decision = await this.promptSaveUnsaved();
+      if (decision === 'cancel') return;
+      if (decision === 'save') {
+        const saved = await this.saveFile();
+        if (!saved) return;
+      }
+    }
+
     this.currentFilePath = null;
     this.currentEncoding = 'utf8';
     this.currentLineEnding = '\r\n';
@@ -397,12 +468,30 @@ class AppController {
   }
 
   async openFile() {
+    if (this.isModified) {
+      const decision = await this.promptSaveUnsaved();
+      if (decision === 'cancel') return;
+      if (decision === 'save') {
+        const saved = await this.saveFile();
+        if (!saved) return;
+      }
+    }
+
     const filePath = await window.mowinAPI.openFileDialog();
     if (!filePath) return;
     await this.openDocumentPath(filePath);
   }
 
   async openDocumentPath(filePath) {
+    if (this.isModified && this.currentFilePath !== filePath) {
+      const decision = await this.promptSaveUnsaved();
+      if (decision === 'cancel') return;
+      if (decision === 'save') {
+        const saved = await this.saveFile();
+        if (!saved) return;
+      }
+    }
+
     const res = await window.mowinAPI.readFile(filePath);
     if (!res.success) {
       alert('读取文件失败: ' + res.error);
@@ -438,22 +527,24 @@ class AppController {
         saveSpan.textContent = '已保存 ✓';
         setTimeout(() => { saveSpan.textContent = '保存'; }, 1500);
       }
+      return true;
     } else {
       alert('保存失败: ' + res.error);
+      return false;
     }
   }
 
   async saveAs() {
     const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath) : '未命名.md';
     const filePath = await window.mowinAPI.saveFileDialog(defaultName);
-    if (!filePath) return;
+    if (!filePath) return false;
     this.currentFilePath = filePath;
-    await this.saveFile();
+    return await this.saveFile();
   }
 
   async saveUTF8() {
     this.currentEncoding = 'utf8';
-    await this.saveAs();
+    return await this.saveAs();
   }
 
   async revertSaved() {
@@ -595,13 +686,14 @@ $$
   updateStatusLine() {
     const text = this.editor.textarea.value;
     const charCount = text.replace(/\s/g, '').length;
+    const readMinutes = Math.max(1, Math.ceil(charCount / 350));
     const totalLines = this.editor.lineStarts.length;
     const { line } = this.editor.getCurrentLineAndCol();
     const encStr = this.currentEncoding.toUpperCase();
     const endingStr = this.currentLineEnding === '\r\n' ? 'CRLF' : 'LF';
     const stateStr = this.isModified ? '修改待保存' : '已保存';
 
-    this.statusBar.textContent = `${charCount} 字符   ·   ${totalLines} 行   ·   第 ${line} 行   ·   ${encStr} / ${endingStr}   ·   ${stateStr}`;
+    this.statusBar.textContent = `${charCount} 字符 (约 ${readMinutes} 分钟阅读)   ·   ${totalLines} 行   ·   第 ${line} 行   ·   ${encStr} / ${endingStr}   ·   ${stateStr}`;
   }
 }
 

@@ -289,6 +289,22 @@ ipcMain.handle('app:choose-folder-dialog', async (event) => {
   return filePaths[0];
 });
 
+ipcMain.handle('app:confirm-save-dialog', async (event, fileName) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: ['保存', '不保存', '取消'],
+    defaultId: 0,
+    cancelId: 2,
+    title: '未保存的更改 - 墨窗',
+    message: `是否将更改保存到“${fileName}”？`,
+    detail: '如果不保存，您所做的修改将会彻底丢失。'
+  });
+  if (response === 0) return 'save';
+  if (response === 1) return 'dont-save';
+  return 'cancel';
+});
+
 ipcMain.handle('app:read-file', async (event, filePath) => {
   try {
     const data = detectAndReadFile(filePath);

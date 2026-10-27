@@ -62,6 +62,8 @@ app.whenReady().then(async () => {
       res.push('Redo success: ' + (app.editor.textarea.value === formattedVal));
 
       app.editor.undo(); // 还原回初始
+      await app.renderPreview();
+      await new Promise(r => setTimeout(r, 100));
 
       // 3. 测试编辑区滚动 -> 预览区双向同步
       app.editor.textarea.scrollTop = 400;

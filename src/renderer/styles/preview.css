@@ -74,6 +74,7 @@
 }
 
 #preview-viewport pre {
+  position: relative;
   padding: 18px 22px;
   border-radius: 8px;
   background: var(--bg-code);
@@ -81,6 +82,42 @@
   overflow: auto;
   line-height: 1.62;
   margin: 1.5em 0;
+}
+
+.code-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-shadow: var(--shadow-sm);
+}
+
+#preview-viewport pre:hover .code-copy-btn {
+  opacity: 0.9;
+}
+
+.code-copy-btn:hover {
+  opacity: 1 !important;
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.code-copy-btn.copied {
+  opacity: 1 !important;
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
 }
 
 #preview-viewport code {

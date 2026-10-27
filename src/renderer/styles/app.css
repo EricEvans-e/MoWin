@@ -299,6 +299,13 @@ html, body {
   color: var(--accent);
 }
 
+.outline-item.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+  border-left: 2px solid var(--accent);
+}
+
 .outline-item.level-1 { font-weight: 650; }
 .outline-item.level-2 { padding-left: 20px; }
 .outline-item.level-3 { padding-left: 32px; color: var(--text-secondary); }
