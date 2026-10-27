@@ -827,8 +827,33 @@ class AppController {
   }
 
   async exportPDF() {
-    const margin = this.sidebar.getPdfMarginOption();
-    await window.mowinAPI.printToPdf(margin);
+    // 1. 如果有未完成的渲染或防抖定时器，立即执行全量渲染
+    if (this.renderTimer) {
+      clearTimeout(this.renderTimer);
+      this.renderTimer = null;
+      await this.renderPreview();
+    } else if (this.previewNeedsRender || this.mode === 'edit') {
+      await this.renderPreview();
+      this.previewNeedsRender = false;
+    }
+
+    // 2. 如果 MathJax 正在排版公式，等待排版完全完成
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      try {
+        await window.MathJax.startup.promise;
+      } catch (e) {}
+    }
+
+    // 3. 提取文档真实名称与页边距配置
+    const defaultName = this.currentFilePath
+      ? window.mowinAPI.path.basename(this.currentFilePath, window.mowinAPI.path.extname(this.currentFilePath))
+      : (this.headings && this.headings[0] ? this.headings[0].title.slice(0, 30) : '未命名文档');
+
+    const marginOption = this.sidebar.getPdfMarginOption();
+    await window.mowinAPI.printToPdf({
+      marginOption: marginOption,
+      defaultName: `${defaultName}.pdf`
+    });
   }
 
   async openSample() {

@@ -418,19 +418,26 @@ ipcMain.handle('app:export-html', async (event, defaultName, htmlContent) => {
   }
 });
 
-ipcMain.handle('app:print-to-pdf', async (event, marginOption) => {
+ipcMain.handle('app:print-to-pdf', async (event, optionsOrMargin) => {
   const win = BrowserWindow.fromWebContents(event.sender);
+  const options = (typeof optionsOrMargin === 'object' && optionsOrMargin !== null)
+    ? optionsOrMargin
+    : { marginOption: optionsOrMargin };
+
   // 页边距映射 (单位: 英寸)
   // 正常 · 25.4 mm = 1.0 inch
   // 较窄 · 12.7 mm = 0.5 inch
   // 极窄 · 6.35 mm = 0.25 inch
+  const marginOption = options.marginOption || 0;
   let marginInches = 1.0;
   if (marginOption === 1) marginInches = 0.5;
   else if (marginOption === 2) marginInches = 0.25;
 
+  const defaultName = options.defaultName || '文档.pdf';
+
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: '存储为 PDF 文件',
-    defaultPath: '文档.pdf',
+    defaultPath: defaultName,
     filters: [{ name: 'PDF 文档 (*.pdf)', extensions: ['pdf'] }]
   });
   if (canceled || !filePath) return false;
