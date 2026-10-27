@@ -17,6 +17,7 @@ class AppController {
     this.initDOM();
     this.initComponents();
     this.initDividerDrag();
+    this.initSidebarDrag();
     this.initMenuListener();
     this.loadInitialFile();
   }
@@ -27,6 +28,7 @@ class AppController {
     this.previewContainer = document.getElementById('preview-container');
     this.previewViewport = document.getElementById('preview-viewport');
     this.paneDivider = document.getElementById('pane-divider');
+    this.sidebarDivider = document.getElementById('sidebar-divider');
     this.titleDisplay = document.getElementById('document-title-display');
     this.statusBar = document.getElementById('status-bar');
     this.themeBtn = document.getElementById('btn-toolbar-theme');
@@ -160,6 +162,77 @@ class AppController {
         if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
       }
     });
+  }
+
+  // 实现左侧栏拖拽调整宽度与持久化记忆
+  initSidebarDrag() {
+    const sidebarEl = document.getElementById('sidebar');
+    const dividerEl = this.sidebarDivider;
+    if (!sidebarEl || !dividerEl) return;
+
+    let isDragging = false;
+
+    // 从 localStorage 加载保存的侧栏宽度，默认适中为 220px
+    const savedWidth = parseInt(localStorage.getItem('mowin_sidebar_width'), 10);
+    if (savedWidth && savedWidth >= 140 && savedWidth <= 500) {
+      this.setSidebarWidth(savedWidth);
+    } else {
+      this.setSidebarWidth(220);
+    }
+
+    dividerEl.addEventListener('mousedown', (e) => {
+      if (sidebarEl.classList.contains('hidden')) return;
+      isDragging = true;
+      sidebarEl.classList.add('resizing');
+      dividerEl.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const workspaceRect = document.getElementById('main-workspace').getBoundingClientRect();
+      const rawWidth = Math.round(e.clientX - workspaceRect.left);
+      const minWidth = 140;
+      const maxWidth = Math.min(500, Math.floor(workspaceRect.width * 0.5));
+      const clampedWidth = Math.max(minWidth, Math.min(rawWidth, maxWidth));
+      this.setSidebarWidth(clampedWidth);
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        sidebarEl.classList.remove('resizing');
+        dividerEl.classList.remove('resizing');
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = '';
+        const currentWidth = parseInt(sidebarEl.style.width, 10);
+        if (currentWidth) {
+          localStorage.setItem('mowin_sidebar_width', currentWidth);
+        }
+        this.editor.updateGutter();
+        if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+      }
+    });
+
+    // 双击分割线快速重置为默认宽度 (220px)
+    dividerEl.addEventListener('dblclick', () => {
+      this.setSidebarWidth(220);
+      localStorage.setItem('mowin_sidebar_width', 220);
+      this.editor.updateGutter();
+      if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
+    });
+  }
+
+  setSidebarWidth(width) {
+    const sidebarEl = document.getElementById('sidebar');
+    if (!sidebarEl) return;
+    const clamped = Math.max(140, Math.min(width, 500));
+    sidebarEl.style.setProperty('--sidebar-width', `${clamped}px`);
+    sidebarEl.style.width = `${clamped}px`;
+    sidebarEl.style.minWidth = `${clamped}px`;
+    sidebarEl.style.maxWidth = `${clamped}px`;
   }
 
   async loadInitialFile() {
