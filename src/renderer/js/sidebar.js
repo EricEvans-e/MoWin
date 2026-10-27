@@ -20,12 +20,23 @@ class SidebarController {
     this.contentEl = this.sidebar.querySelector('#sidebar-content');
 
     this.chooseFolderBtn = this.sidebar.querySelector('#btn-choose-folder');
+    this.filterRow = this.sidebar.querySelector('#sidebar-filter-row');
+    this.filterInput = this.sidebar.querySelector('#sidebar-file-filter');
+    this.fileFilterQuery = '';
+
     this.marginSelect = this.sidebar.querySelector('#select-pdf-margin');
     this.exportPdfBtn = this.sidebar.querySelector('#btn-export-pdf');
     this.exportHtmlBtn = this.sidebar.querySelector('#btn-export-html');
 
     this.tabOutlineBtn.addEventListener('click', () => this.switchTab('outline'));
     this.tabFilesBtn.addEventListener('click', () => this.switchTab('files'));
+
+    if (this.filterInput) {
+      this.filterInput.addEventListener('input', () => {
+        this.fileFilterQuery = this.filterInput.value.trim().toLowerCase();
+        this.renderFiles();
+      });
+    }
 
     this.chooseFolderBtn.addEventListener('click', () => this.chooseFolder());
     this.exportPdfBtn.addEventListener('click', () => this.app.exportPDF());
@@ -43,6 +54,7 @@ class SidebarController {
       this.tabFilesBtn.classList.remove('active');
       this.sectionTitle.textContent = '当前文档大纲';
       this.chooseFolderBtn.style.display = 'none';
+      if (this.filterRow) this.filterRow.style.display = 'none';
       this.renderOutline();
     } else {
       this.tabFilesBtn.classList.add('active');
@@ -50,6 +62,7 @@ class SidebarController {
       const folderName = this.currentFolder ? window.mowinAPI.path.basename(this.currentFolder) : '请选择 Markdown 文件夹';
       this.sectionTitle.textContent = folderName;
       this.chooseFolderBtn.style.display = 'flex';
+      if (this.filterRow) this.filterRow.style.display = this.currentFolder ? 'block' : 'none';
       this.renderFiles();
     }
   }
@@ -124,6 +137,8 @@ class SidebarController {
 
   renderFiles() {
     this.contentEl.innerHTML = '';
+    if (this.filterRow) this.filterRow.style.display = this.currentFolder ? 'block' : 'none';
+
     if (!this.currentFolder) {
       const hint = document.createElement('div');
       hint.className = 'file-item';
@@ -133,26 +148,56 @@ class SidebarController {
       return;
     }
 
-    if (!this.filesList.length) {
+    let list = this.filesList;
+    if (this.fileFilterQuery) {
+      list = list.filter(filePath => {
+        const name = window.mowinAPI.path.basename(filePath).toLowerCase();
+        return name.includes(this.fileFilterQuery) || filePath.toLowerCase().includes(this.fileFilterQuery);
+      });
+    }
+
+    if (!list.length) {
       const empty = document.createElement('div');
       empty.className = 'file-item';
-      empty.textContent = '文件夹内无 Markdown 文件';
+      empty.textContent = this.fileFilterQuery ? '未找到匹配的 Markdown 文件' : '文件夹内无 Markdown 文件';
       this.contentEl.appendChild(empty);
       return;
     }
 
-    this.filesList.forEach(filePath => {
+    const currentDoc = this.app.currentFilePath;
+    list.forEach(filePath => {
       const item = document.createElement('div');
       item.className = 'file-item';
+      if (currentDoc && (currentDoc === filePath || window.mowinAPI.path.resolve(currentDoc) === window.mowinAPI.path.resolve(filePath))) {
+        item.classList.add('active');
+      }
       const relPath = window.mowinAPI.path.relative(this.currentFolder, filePath);
       item.textContent = relPath;
       item.title = filePath;
 
       item.addEventListener('click', () => {
         this.app.openDocumentPath(filePath);
+        this.highlightActiveFile(filePath);
       });
 
       this.contentEl.appendChild(item);
+    });
+  }
+
+  setFolderContext(folderPath) {
+    if (!this.currentFolder && folderPath) {
+      this.currentFolder = folderPath;
+      this.sectionTitle.textContent = window.mowinAPI.path.basename(folderPath);
+      this.refreshFiles();
+    }
+  }
+
+  highlightActiveFile(filePath) {
+    if (this.currentTab !== 'files') return;
+    const items = this.contentEl.querySelectorAll('.file-item');
+    items.forEach(el => {
+      if (el.title === filePath) el.classList.add('active');
+      else el.classList.remove('active');
     });
   }
 

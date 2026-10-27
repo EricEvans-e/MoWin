@@ -307,13 +307,9 @@ class EditorController {
       const imgPaths = filePaths.filter(p => imagePaths.isImage(p));
       if (!imgPaths.length) return;
 
-      this.history.pushSnapshot();
       const docPath = this.app.currentFilePath;
       const mdImages = imgPaths.map(p => imagePaths.markdown(p, docPath)).join('\n');
       this.insertAtCursor('\n' + mdImages + '\n');
-      this.updateGutter();
-      this.app.onTextChanged();
-      this.history.pushSnapshot();
     });
   }
 
@@ -328,11 +324,11 @@ class EditorController {
   insertAtCursor(text) {
     const start = this.textarea.selectionStart;
     const end = this.textarea.selectionEnd;
-    const val = this.textarea.value;
-    this.textarea.value = val.slice(0, start) + text + val.slice(end);
-    const newPos = start + text.length;
-    this.textarea.selectionStart = newPos;
-    this.textarea.selectionEnd = newPos;
+    this.applyEdit({
+      range: [start, end],
+      replacement: text,
+      selection: [start + text.length, start + text.length]
+    });
   }
 
   setValue(text, selection = null) {
@@ -419,18 +415,30 @@ class EditorController {
     const children = this.mirror.children;
     const measurements = [];
     let gutterHtml = '';
-    const baseLineHeight = parseFloat(window.getComputedStyle(this.textarea).lineHeight) || 27.75;
+    const cs = window.getComputedStyle(this.textarea);
+    const baseLineHeight = parseFloat(cs.lineHeight) || 27.75;
+    const paddingTop = parseFloat(cs.paddingTop) || 30;
+    const clientW = this.textarea.clientWidth || 600;
+    const fontSize = parseFloat(cs.fontSize) || 15;
+    // 估算必定不会折行的单行最大字符数阈值 (中文字符宽约 1em，英文字符宽约 0.6em)
+    const safeSingleLineLength = Math.max(10, Math.floor((clientW - 50) / fontSize));
 
+    let runningTop = paddingTop;
     for (let i = 0; i < count; i++) {
-      const el = children[i];
-      const h = el ? el.offsetHeight : baseLineHeight;
-      const top = el ? el.offsetTop : (i * baseLineHeight + 30);
+      const lineStr = lines[i] || '';
+      let h = baseLineHeight;
+      // 仅对可能折行的长段落读取真实高度，避免对几千行频繁触发布局重排 (Reflow)
+      if (lineStr.length > safeSingleLineLength) {
+        const el = children[i];
+        if (el) h = el.offsetHeight || baseLineHeight;
+      }
       measurements.push({
         line: i + 1,
-        top: top,
+        top: runningTop,
         height: h
       });
       gutterHtml += `<div class="gutter-num" style="height:${h}px;line-height:${baseLineHeight}px;">${i + 1}</div>`;
+      runningTop += h;
     }
 
     this.lineMeasurements = measurements;

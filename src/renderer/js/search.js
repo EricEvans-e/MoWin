@@ -51,6 +51,10 @@ class SearchController {
   }
 
   show(isReplace = false) {
+    if (this.app.mode === 'read') {
+      this.app.setMode('split');
+    }
+
     this.bar.style.display = 'flex';
     this.replaceRow.style.display = isReplace ? 'flex' : 'none';
 

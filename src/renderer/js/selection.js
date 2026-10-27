@@ -167,12 +167,11 @@ class SelectionPopoverController {
 
   onInsertAfter(snippet) {
     const end = Math.max(this.selectedRange.start, this.selectedRange.end);
-    const text = this.app.editor.textarea.value;
-    const newText = text.slice(0, end) + snippet + text.slice(end);
-    this.app.editor.setValue(newText, [end + snippet.length, end + snippet.length]);
-    this.app.editor.rebuildLineStarts();
-    this.app.editor.updateGutter();
-    this.app.onTextChanged();
+    this.app.editor.applyEdit({
+      range: [end, end],
+      replacement: snippet,
+      selection: [end + snippet.length, end + snippet.length]
+    });
     this.hide();
     this.app.editor.textarea.focus();
   }

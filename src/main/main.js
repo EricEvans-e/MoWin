@@ -3,7 +3,7 @@
  * 多窗口管理、本地资源安全协议、编码检测、文件 I/O、PDF / HTML 导出及注册表集成
  */
 
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -67,9 +67,59 @@ function createDocumentWindow(targetFilePath = null) {
   const winInfo = {
     win,
     filePath: targetFilePath ? path.resolve(targetFilePath) : null,
-    docDir: targetFilePath ? path.dirname(path.resolve(targetFilePath)) : null
+    docDir: targetFilePath ? path.dirname(path.resolve(targetFilePath)) : null,
+    isModified: false,
+    forceClose: false
   };
   openWindows.set(win.id, winInfo);
+
+  // 原生 Windows 右键上下文菜单 (Cut, Copy, Paste, Format)
+  win.webContents.on('context-menu', (event, params) => {
+    const { editFlags, isEditable, selectionText } = params;
+    const menuTemplate = [];
+
+    if (isEditable) {
+      menuTemplate.push(
+        { label: '撤销(&U)', accelerator: 'CmdOrCtrl+Z', enabled: editFlags.canUndo, click: () => win.webContents.send('menu:action', 'undo') },
+        { label: '重做(&R)', accelerator: 'CmdOrCtrl+Y', enabled: editFlags.canRedo, click: () => win.webContents.send('menu:action', 'redo') },
+        { type: 'separator' },
+        { label: '剪切(&T)', accelerator: 'CmdOrCtrl+X', enabled: editFlags.canCut, role: 'cut' },
+        { label: '复制(&C)', accelerator: 'CmdOrCtrl+C', enabled: editFlags.canCopy, role: 'copy' },
+        { label: '粘贴(&P)', accelerator: 'CmdOrCtrl+V', enabled: editFlags.canPaste, role: 'paste' },
+        { label: '全选(&A)', accelerator: 'CmdOrCtrl+A', enabled: editFlags.canSelectAll, role: 'selectAll' }
+      );
+      if (selectionText && selectionText.trim()) {
+        menuTemplate.push(
+          { type: 'separator' },
+          { label: '加粗(&B)', click: () => win.webContents.send('menu:action', 'format-bold') },
+          { label: '斜体(&I)', click: () => win.webContents.send('menu:action', 'format-italic') },
+          { label: '行内代码', click: () => win.webContents.send('menu:action', 'format-inline-code') },
+          {
+            label: '设为标题…',
+            submenu: [
+              { label: '1 级标题', click: () => win.webContents.send('menu:action', 'format-heading', 1) },
+              { label: '2 级标题', click: () => win.webContents.send('menu:action', 'format-heading', 2) },
+              { label: '3 级标题', click: () => win.webContents.send('menu:action', 'format-heading', 3) },
+              { label: '恢复正文', click: () => win.webContents.send('menu:action', 'format-heading', 0) }
+            ]
+          }
+        );
+      }
+    } else {
+      if (editFlags.canCopy) {
+        menuTemplate.push({ label: '复制(&C)', accelerator: 'CmdOrCtrl+C', role: 'copy' });
+      }
+      menuTemplate.push({ label: '全选(&A)', accelerator: 'CmdOrCtrl+A', role: 'selectAll' });
+    }
+
+    menuTemplate.push(
+      { type: 'separator' },
+      { label: '查找…(&F)', accelerator: 'CmdOrCtrl+F', click: () => win.webContents.send('menu:action', 'find') }
+    );
+
+    const contextMenu = Menu.buildFromTemplate(menuTemplate);
+    contextMenu.popup({ window: win });
+  });
 
   win.loadFile(path.join(__dirname, '../renderer/index.html'));
 
@@ -77,6 +127,30 @@ function createDocumentWindow(targetFilePath = null) {
     win.show();
     // 首次启动时提示设置默认应用
     DefaultApp.offer(win, true);
+  });
+
+  // 窗口关闭拦截（未保存修改时原生对话框防护）
+  win.on('close', async (e) => {
+    const info = openWindows.get(win.id);
+    if (info && info.isModified && !info.forceClose) {
+      e.preventDefault();
+      const fileName = info.filePath ? path.basename(info.filePath) : '未命名.md';
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ['保存', '不保存', '取消'],
+        defaultId: 0,
+        cancelId: 2,
+        title: '未保存的更改 - 墨窗',
+        message: `是否将更改保存到“${fileName}”？`,
+        detail: '如果不保存，您所做的修改将会彻底丢失。'
+      });
+      if (response === 0) { // 保存并关闭
+        win.webContents.send('menu:action', 'save-and-close');
+      } else if (response === 1) { // 不保存直接关闭
+        info.forceClose = true;
+        win.close();
+      } // 2: 取消关闭
+    }
   });
 
   win.on('closed', () => {
@@ -419,7 +493,45 @@ ipcMain.handle('app:show-default-app-dialog', (event) => {
   if (win) DefaultApp.offer(win, false);
 });
 
+ipcMain.handle('app:read-image-data-url', async (event, filePath) => {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.bmp': 'image/bmp',
+      '.ico': 'image/x-icon'
+    };
+    const mime = mimeMap[ext] || 'image/png';
+    const data = fs.readFileSync(filePath);
+    return `data:${mime};base64,${data.toString('base64')}`;
+  } catch (e) {
+    return null;
+  }
+});
+
+ipcMain.handle('app:force-close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) {
+    const info = openWindows.get(win.id);
+    if (info) info.forceClose = true;
+    win.close();
+  }
+  return true;
+});
+
 ipcMain.handle('app:set-title', (event, title) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (win) win.setTitle(title);
+  if (win) {
+    win.setTitle(title);
+    const info = openWindows.get(win.id);
+    if (info) {
+      info.isModified = title.includes(' •');
+    }
+  }
 });

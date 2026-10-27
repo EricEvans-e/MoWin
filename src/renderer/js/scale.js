@@ -58,8 +58,9 @@ class DisplayScaleController {
     gutter.style.lineHeight = '1.85';
     textarea.style.lineHeight = '1.85';
 
-    // 重新校准行号
+    // 重新校准行号与同步滚动映射
     this.app.editor.updateGutter();
+    if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
   }
 
   setPreviewScale(percent) {
@@ -68,9 +69,10 @@ class DisplayScaleController {
     localStorage.setItem('mowin_preview_scale', p.toString());
     this.previewSelect.value = p;
 
-    // 缩放排版预览视口
+    // 缩放排版预览视口并重建滚动位置映射
     const viewport = this.app.previewViewport;
     viewport.style.zoom = (p / 100).toString();
+    if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
   }
 
   stepEditor(delta) {

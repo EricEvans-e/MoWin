@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('mowinAPI', {
   
   // 导出与打印
   exportHtml: (defaultName, htmlContent) => ipcRenderer.invoke('app:export-html', defaultName, htmlContent),
+  readImageDataUrl: (filePath) => ipcRenderer.invoke('app:read-image-data-url', filePath),
   printToPdf: (marginOption) => ipcRenderer.invoke('app:print-to-pdf', marginOption),
   print: () => ipcRenderer.invoke('app:print'),
 
@@ -66,6 +67,7 @@ contextBridge.exposeInMainWorld('mowinAPI', {
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   showDefaultAppDialog: () => ipcRenderer.invoke('app:show-default-app-dialog'),
   setWindowTitle: (title) => ipcRenderer.invoke('app:set-title', title),
+  forceClose: () => ipcRenderer.invoke('app:force-close'),
   getInitialFilePath: () => ipcRenderer.invoke('app:get-initial-file'),
 
   // 菜单事件监听

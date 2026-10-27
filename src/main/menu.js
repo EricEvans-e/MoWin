@@ -179,7 +179,7 @@ function buildAppMenu(createDocumentWindow) {
               dialog.showMessageBox(win, {
                 type: 'info',
                 title: '功能自检结果',
-                message: '35 项核心功能自检全部通过！',
+                message: '36 项核心功能自检全部通过！',
                 detail: '包括 GFM 渲染、大纲解析、离线 MathJax 公式保护、LaTeX 转换、双栏滚动算法及编码往返等。'
               });
             } catch (err) {

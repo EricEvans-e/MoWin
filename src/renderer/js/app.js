@@ -186,6 +186,12 @@ class AppController {
         case 'save-file': this.saveFile(); break;
         case 'save-as': this.saveAs(); break;
         case 'save-utf8': this.saveUTF8(); break;
+        case 'save-and-close': {
+          this.saveFile().then((saved) => {
+            if (saved) window.mowinAPI.forceClose();
+          });
+          break;
+        }
         case 'revert-saved': this.revertSaved(); break;
         case 'export-html': this.exportHTML(); break;
         case 'export-pdf': this.exportPDF(); break;
@@ -319,6 +325,9 @@ class AppController {
           absImgPath = window.mowinAPI.path.resolve(docDir, cleanSrc);
         }
 
+        img.setAttribute('data-original-src', src);
+        if (absImgPath) img.setAttribute('data-abs-path', absImgPath);
+
         img.src = this.toResourceUrl(absImgPath) + extra;
         img.addEventListener('error', () => {
           img.classList.add('broken-image');
@@ -400,6 +409,9 @@ class AppController {
         }
       } catch (err) {
         console.warn('MathJax 排版异常:', err);
+        if (this.renderGeneration === currentGeneration) {
+          this.sidebar.setPdfEnabled(true);
+        }
       }
     } else {
       this.sidebar.setPdfEnabled(true);
@@ -545,6 +557,9 @@ class AppController {
     this.editor.history.init(res.content);
     this.renderPreview();
     this.updateTitleAndStatus();
+
+    this.sidebar.setFolderContext(window.mowinAPI.path.dirname(filePath));
+    this.sidebar.highlightActiveFile(filePath);
   }
 
   async saveFile() {
@@ -575,7 +590,11 @@ class AppController {
     const filePath = await window.mowinAPI.saveFileDialog(defaultName);
     if (!filePath) return false;
     this.currentFilePath = filePath;
-    return await this.saveFile();
+    const saved = await this.saveFile();
+    if (saved) {
+      await this.renderPreview(); // 刷新基准目录以加载相对路径图片
+    }
+    return saved;
   }
 
   async saveUTF8() {
@@ -585,13 +604,48 @@ class AppController {
 
   async revertSaved() {
     if (!this.currentFilePath) return;
+    if (this.isModified) {
+      const confirmed = confirm('当前文档包含未保存的修改，确定要放弃所有更改并恢复到上次保存的版本吗？');
+      if (!confirmed) return;
+    }
     await this.openDocumentPath(this.currentFilePath);
   }
 
   async exportHTML() {
     const defaultName = this.currentFilePath ? window.mowinAPI.path.basename(this.currentFilePath, window.mowinAPI.path.extname(this.currentFilePath)) : '文档';
-    // 提取当前渲染好的预览内容与 MathJax SVG 样式
-    const mainHtml = this.previewViewport.innerHTML;
+
+    // 克隆当前预览容器，进行无损离线便携化处理
+    const tempContainer = this.previewViewport.cloneNode(true);
+
+    // 移除所有代码块内的“复制”悬浮按钮
+    tempContainer.querySelectorAll('.code-copy-btn').forEach(btn => btn.remove());
+
+    // 转换所有本地图片为内联 Base64 数据，确保导出的单文件 HTML 独立便携
+    const imgs = tempContainer.querySelectorAll('img');
+    for (const img of imgs) {
+      img.classList.remove('broken-image');
+      img.removeAttribute('title');
+      const absPath = img.getAttribute('data-abs-path');
+      if (absPath) {
+        try {
+          const dataUrl = await window.mowinAPI.readImageDataUrl(absPath);
+          if (dataUrl) {
+            img.src = dataUrl;
+          } else {
+            img.src = img.getAttribute('data-original-src') || img.src;
+          }
+        } catch (e) {
+          img.src = img.getAttribute('data-original-src') || img.src;
+        }
+      } else {
+        const orig = img.getAttribute('data-original-src');
+        if (orig) img.src = orig;
+      }
+      img.removeAttribute('data-abs-path');
+      img.removeAttribute('data-original-src');
+    }
+
+    const mainHtml = tempContainer.innerHTML;
     const mathStyles = Array.from(document.querySelectorAll('style[id^=MJX]')).map(s => s.outerHTML).join('\n');
     const fullHtml = window.mowinAPI.markdown.page({ body: mainHtml }, {
       title: defaultName,
