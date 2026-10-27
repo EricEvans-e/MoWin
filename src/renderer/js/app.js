@@ -279,7 +279,9 @@ class AppController {
     this.sidebar.updateHeadings(headings);
 
     // 解析图片路径（若为本地图片，转换为 mowin-resource:// 协议进行安全加载）
-    const docDir = this.currentFilePath ? window.mowinAPI.path.dirname(this.currentFilePath) : '';
+    const docDir = this.currentFilePath
+      ? window.mowinAPI.path.dirname(this.currentFilePath)
+      : (this.sidebar.currentFolder || '');
     const tempContainer = document.createElement('div');
     tempContainer.innerHTML = body;
 
@@ -287,11 +289,16 @@ class AppController {
     for (const img of imgEls) {
       const src = img.getAttribute('src');
       if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-        let absImgPath = src;
-        if (docDir && !window.mowinAPI.path.isAbsolute(src)) {
-          absImgPath = window.mowinAPI.path.resolve(docDir, src);
+        let cleanSrc = src.trim();
+        try { cleanSrc = decodeURIComponent(cleanSrc); } catch (e) {}
+        let absImgPath = cleanSrc;
+        if (docDir && !window.mowinAPI.path.isAbsolute(cleanSrc)) {
+          absImgPath = window.mowinAPI.path.resolve(docDir, cleanSrc);
         }
         img.src = `mowin-resource:///${encodeURIComponent(absImgPath.replace(/\\/g, '/'))}`;
+        img.addEventListener('error', () => {
+          img.title = `[无法加载图片: ${cleanSrc}] 请检查文件路径是否存在：${absImgPath}`;
+        });
       }
       img.addEventListener('load', () => {
         if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();

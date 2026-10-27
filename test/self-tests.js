@@ -70,6 +70,16 @@ function runTests() {
     '过滤原始危险 HTML 和 JavaScript 伪协议'
   );
 
+  const htmlImageSample = '<div align="center">\n  <img src="./images/fig1.png" width="85%" onerror="alert(1)" />\n  <p><strong>图 1：范式对比</strong></p>\n</div>';
+  const htmlImageRendered = Markdown.render(htmlImageSample);
+  check(
+    htmlImageRendered.body.includes('<div align="center">') &&
+    htmlImageRendered.body.includes('<img src="./images/fig1.png" width="85%"') &&
+    htmlImageRendered.body.includes('<strong>图 1：范式对比</strong>') &&
+    !htmlImageRendered.body.includes('onerror'),
+    '原生 HTML 排版标签 (div居中、img尺寸、段落加粗) 完整渲染并安全清洗 on* 事件'
+  );
+
   check(
     Markdown.render('```\n# 假标题\n```\n\n真正标题\n===').headings.map(h => h.title)[0] === '真正标题',
     '代码块内部不污染大纲，且支持 Setext 标题'

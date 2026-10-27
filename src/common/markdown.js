@@ -38,6 +38,21 @@ const Markdown = {
   },
 
   /**
+   * 清洗危险脚本与事件，同时保留正常排版标签与样式属性 (div, img, span, style, width, align 等)
+   */
+  sanitize(html) {
+    if (!html) return '';
+    return html
+      // 移除 <script> 及其内容
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      // 移除内联 on* 危险事件 (如 onerror=, onload=, onclick= 等)
+      .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+      // 移除 javascript: 伪协议
+      .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '$1=$2#$2')
+      .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, '$1="#"');
+  },
+
+  /**
    * 渲染 Markdown 文本
    * @param {string} text Markdown 源码
    * @returns {{body: string, headings: Array<{title: string, level: number, line: number}>}}
@@ -47,7 +62,7 @@ const Markdown = {
     const protectedMarkdown = math.markdown;
 
     const md = new MarkdownIt({
-      html: false, // 过滤原始 HTML，防止 XSS 攻击
+      html: true, // 允许排版级原生 HTML 标签 (居中对齐 div、带尺寸样式的 img、span、kbd 等)
       xhtmlOut: true,
       breaks: false,
       langPrefix: 'language-',
@@ -98,6 +113,9 @@ const Markdown = {
     }
 
     let renderedHTML = md.renderer.render(parsedTokens, md.options, {});
+
+    // 过滤危险脚本与伪协议，保留安全排版标签
+    renderedHTML = this.sanitize(renderedHTML);
 
     // 恢复数学公式为 DOM 容器
     const body = math.restore(renderedHTML);
