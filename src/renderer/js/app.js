@@ -98,13 +98,6 @@ class AppController {
       }
     });
 
-    // 窗口关闭前如果有未保存修改，触发系统防护提示
-    window.addEventListener('beforeunload', (e) => {
-      if (this.isModified) {
-        e.returnValue = false;
-      }
-    });
-
     window.invalidateSourceBlocks = () => {
       if (this.scrollSync) this.scrollSync.invalidateSourceBlocks();
     };
@@ -265,9 +258,20 @@ class AppController {
 
   onTextChanged() {
     this.selectionPopover.hide();
-    this.isModified = true;
-    this.updateTitleAndStatus();
+    if (!this.isModified) {
+      this.isModified = true;
+      this.updateTitleAndStatus();
+    } else {
+      this.scheduleStatusUpdate();
+    }
     this.scheduleRender();
+  }
+
+  scheduleStatusUpdate() {
+    if (this.statusUpdateTimer) clearTimeout(this.statusUpdateTimer);
+    this.statusUpdateTimer = setTimeout(() => {
+      this.updateStatusLine();
+    }, 120);
   }
 
   onEditorScrolled() {
@@ -277,14 +281,18 @@ class AppController {
 
   onSelectionChanged() {
     this.selectionPopover.scheduleShow();
-    this.updateStatusLine();
+    this.scheduleStatusUpdate();
   }
 
   scheduleRender() {
+    if (this.mode === 'edit') {
+      this.previewNeedsRender = true;
+      return;
+    }
     if (this.renderTimer) clearTimeout(this.renderTimer);
     this.renderTimer = setTimeout(() => {
       this.renderPreview();
-    }, 180);
+    }, 280);
   }
 
   /**
@@ -399,14 +407,22 @@ class AppController {
           document.head.appendChild(style);
         }
 
+        this.mathCache = this.mathCache || new Map();
         const mathNodes = Array.from(this.previewViewport.querySelectorAll('.mowin-math'));
         for (const node of mathNodes) {
           if (this.renderGeneration !== currentGeneration) return;
           const tex = node.textContent;
           const isDisplay = node.dataset.display === 'true';
+          const cacheKey = `${isDisplay ? 'D:' : 'I:'}${tex}`;
+          if (this.mathCache.has(cacheKey)) {
+            const cachedSvg = this.mathCache.get(cacheKey).cloneNode(true);
+            node.replaceChildren(cachedSvg);
+            continue;
+          }
           try {
             const svgOutput = await window.MathJax.tex2svgPromise(tex, { display: isDisplay });
             svgOutput.querySelectorAll('mjx-assistive-mml').forEach(n => n.remove());
+            this.mathCache.set(cacheKey, svgOutput.cloneNode(true));
             node.replaceChildren(svgOutput);
           } catch (err) {
             node.classList.add('math-error');
@@ -495,6 +511,10 @@ class AppController {
     this.selectionPopover.hide();
     if (mode !== 'read') {
       this.editor.updateGutter();
+    }
+    if (mode !== 'edit' && this.previewNeedsRender) {
+      this.previewNeedsRender = false;
+      this.renderPreview();
     }
     if (window.invalidateSourceBlocks) window.invalidateSourceBlocks();
   }

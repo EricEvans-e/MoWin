@@ -17,6 +17,7 @@ const DefaultApp = {
    */
   async offer(parentWindow, firstLaunch = false) {
     if (firstLaunch) {
+      if (!app.isPackaged) return; // 开发调试模式下不弹窗打扰
       const configPath = path.join(app.getPath('userData'), 'settings.json');
       try {
         if (fs.existsSync(configPath)) {

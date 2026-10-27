@@ -293,7 +293,18 @@ class EditorController {
     this.textarea.addEventListener('mouseup', onSelectChange);
     this.textarea.addEventListener('select', onSelectChange);
     this.textarea.addEventListener('keyup', (e) => {
-      onSelectChange();
+      // 仅在导航键、全选或存在非折叠选区时响应，避免每次普通击键均触发选区计算与状态刷新
+      if (
+        this.textarea.selectionStart !== this.textarea.selectionEnd ||
+        e.key.startsWith('Arrow') ||
+        e.key === 'Home' ||
+        e.key === 'End' ||
+        e.key === 'PageUp' ||
+        e.key === 'PageDown' ||
+        (e.ctrlKey && e.key.toLowerCase() === 'a')
+      ) {
+        onSelectChange();
+      }
     });
 
     // 拖拽文件进入编辑区直接插入图片
@@ -435,9 +446,12 @@ class EditorController {
 
   scheduleUpdateGutter() {
     if (this.gutterUpdateTimer) clearTimeout(this.gutterUpdateTimer);
+    const lineCount = this.lineStarts.length;
+    const isLineCountChanged = (lineCount !== this.lastMeasuredLineCount);
+    const delay = isLineCountChanged ? 25 : 200;
     this.gutterUpdateTimer = setTimeout(() => {
       this.updateGutter();
-    }, 60);
+    }, delay);
   }
 
   /**
@@ -452,6 +466,7 @@ class EditorController {
     const text = this.textarea.value;
     const lines = text.split('\n');
     const count = lines.length;
+    this.lastMeasuredLineCount = count;
 
     let mirrorHtml = '';
     for (let i = 0; i < count; i++) {

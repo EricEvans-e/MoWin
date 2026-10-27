@@ -64,7 +64,11 @@ function createDocumentWindow(targetFilePath = null) {
     }
   });
 
-  win.webContents.setVisualZoomLevelLimits(1, 1);
+  win.webContents.on('did-finish-load', () => {
+    if (!win.isDestroyed()) {
+      win.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
+    }
+  });
 
   const winInfo = {
     win,
@@ -150,7 +154,7 @@ function createDocumentWindow(targetFilePath = null) {
         win.webContents.send('menu:action', 'save-and-close');
       } else if (response === 1) { // 不保存直接关闭
         info.forceClose = true;
-        win.close();
+        win.destroy();
       } // 2: 取消关闭
     }
   });
@@ -499,7 +503,7 @@ ipcMain.handle('app:force-close', (event) => {
   if (win) {
     const info = openWindows.get(win.id);
     if (info) info.forceClose = true;
-    win.close();
+    win.destroy();
   }
   return true;
 });
