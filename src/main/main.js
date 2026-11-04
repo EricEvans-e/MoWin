@@ -203,7 +203,7 @@ function scanFolder(folderPath, maxFiles = 10000) {
   return result.sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
 
-const { detectAndReadFile, saveFileWithFormat } = require('../common/file-io');
+const { detectAndReadFile, saveFileWithFormat, checkFileConflict } = require('../common/file-io');
 
 // 单实例锁配置与多文件关联唤起
 const gotTheLock = app.requestSingleInstanceLock();
@@ -362,17 +362,51 @@ ipcMain.handle('app:read-file', async (event, filePath) => {
   }
 });
 
-ipcMain.handle('app:write-file', async (event, filePath, content, encoding, lineEnding, hasBOM) => {
+ipcMain.handle('app:confirm-conflict-dialog', async (event, fileName, diskMtime) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const timeStr = diskMtime ? new Date(diskMtime).toLocaleTimeString() : '刚刚';
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    buttons: ['覆盖磁盘文件', '重新加载磁盘文件', '另存为…', '取消'],
+    defaultId: 0,
+    cancelId: 3,
+    title: '检测到外部修改冲突 - 墨窗',
+    message: `“${fileName}”已被外部程序修改 (${timeStr})`,
+    detail: '如果您直接保存，将覆盖外部程序所做的修改。\n请选择如何处理此冲突：'
+  });
+  if (response === 0) return 'overwrite';
+  if (response === 1) return 'reload';
+  if (response === 2) return 'save-as';
+  return 'cancel';
+});
+
+ipcMain.handle('app:check-file-conflict', async (event, filePath, expectedMtime, expectedHash) => {
+  return checkFileConflict(filePath, expectedMtime, expectedHash);
+});
+
+ipcMain.handle('app:write-file', async (event, filePath, content, encoding, lineEnding, hasBOM, options = {}) => {
   try {
-    saveFileWithFormat(filePath, content, encoding, lineEnding, hasBOM);
+    const opts = (typeof options === 'object' && options !== null) ? options : {};
+    if (!opts.forceOverwrite) {
+      const conflictRes = checkFileConflict(filePath, opts.expectedMtime, opts.expectedHash);
+      if (conflictRes.conflict) {
+        return {
+          success: false,
+          conflict: true,
+          diskMtime: conflictRes.diskMtime,
+          error: '文件已在外部被修改，为防止覆盖最新内容，保存已暂停。'
+        };
+      }
+    }
+
+    const saveRes = saveFileWithFormat(filePath, content, encoding, lineEnding, hasBOM);
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win && openWindows.has(win.id)) {
       const info = openWindows.get(win.id);
       info.filePath = filePath;
       info.docDir = path.dirname(filePath);
     }
-    const stat = fs.statSync(filePath);
-    return { success: true, mtime: stat.mtimeMs };
+    return { success: true, mtime: saveRes.mtime, hash: saveRes.hash };
   } catch (err) {
     return { success: false, error: err.message };
   }

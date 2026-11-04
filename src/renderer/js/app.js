@@ -15,11 +15,15 @@ class AppController {
     this.headings = [];
 
     this.initDOM();
+    this.initToast();
+    this.initDraftBanner();
     this.initComponents();
     this.initDividerDrag();
     this.initSidebarDrag();
     this.initMenuListener();
     this.loadInitialFile();
+
+    window.addEventListener('focus', () => this.checkExternalChangeOnFocus());
   }
 
   initDOM() {
@@ -257,7 +261,11 @@ class AppController {
         case 'save-utf8': this.saveUTF8(); break;
         case 'save-and-close': {
           this.saveFile().then((saved) => {
-            if (saved) window.mowinAPI.forceClose();
+            if (saved && !this.isModified) {
+              window.mowinAPI.forceClose();
+            } else if (this.isModified) {
+              this.showToast('保存期间检测到新编辑内容，文档未关闭以保护数据', 'warning');
+            }
           });
           break;
         }
@@ -337,6 +345,7 @@ class AppController {
     } else {
       this.scheduleStatusUpdate();
     }
+    this.scheduleAutoSaveDraft();
     this.scheduleRender();
   }
 
@@ -623,20 +632,28 @@ class AppController {
       if (decision === 'cancel') return;
       if (decision === 'save') {
         const saved = await this.saveFile();
-        if (!saved) return;
+        if (!saved || this.isModified) {
+          this.showToast('保存期间检测到新编辑内容，文档未重置以保护数据', 'warning');
+          return;
+        }
       }
     }
 
     this.currentFilePath = null;
     this.currentEncoding = 'utf8';
     this.currentLineEnding = '\r\n';
+    this.currentMtime = null;
+    this.currentHash = null;
     this.isModified = false;
     this.editor.setValue('', [0, 0]);
     this.editor.rebuildLineStarts();
     this.editor.updateGutter();
     this.editor.history.init('');
+    this.clearAutoSaveDraft(null);
+    this.hideDraftBanner();
     this.renderPreview();
     this.updateTitleAndStatus();
+    this.checkDraftRecovery(null);
   }
 
   async openFile() {
@@ -645,7 +662,10 @@ class AppController {
       if (decision === 'cancel') return;
       if (decision === 'save') {
         const saved = await this.saveFile();
-        if (!saved) return;
+        if (!saved || this.isModified) {
+          this.showToast('保存期间检测到新编辑内容，打开操作已暂停以保护数据', 'warning');
+          return;
+        }
       }
     }
 
@@ -660,7 +680,10 @@ class AppController {
       if (decision === 'cancel') return;
       if (decision === 'save') {
         const saved = await this.saveFile();
-        if (!saved) return;
+        if (!saved || this.isModified) {
+          this.showToast('保存期间检测到新编辑内容，切换文档已暂停以保护数据', 'warning');
+          return;
+        }
       }
     }
 
@@ -670,7 +693,7 @@ class AppController {
         // 已在另一窗口激活，无需报错
         return;
       }
-      alert('读取文件失败: ' + res.error);
+      this.showToast('读取文件失败: ' + res.error, 'error');
       return;
     }
 
@@ -679,47 +702,117 @@ class AppController {
     this.currentHasBOM = Boolean(res.hasBOM);
     this.currentLineEnding = res.lineEnding;
     this.currentMtime = res.mtime;
+    this.currentHash = res.hash;
     this.isModified = false;
 
     this.editor.setValue(res.content, [0, 0]);
     this.editor.rebuildLineStarts();
     this.editor.updateGutter();
     this.editor.history.init(res.content);
+    this.hideDraftBanner();
     this.renderPreview();
     this.updateTitleAndStatus();
 
     this.sidebar.setFolderContext(window.mowinAPI.path.dirname(filePath));
     this.sidebar.highlightActiveFile(filePath);
+    this.checkDraftRecovery(filePath);
   }
 
-  async saveFile() {
+  async reloadFromDisk() {
+    if (!this.currentFilePath) return;
+    const res = await window.mowinAPI.readFile(this.currentFilePath);
+    if (!res.success) {
+      this.showToast('重新载入失败: ' + res.error, 'error');
+      return;
+    }
+    this.currentEncoding = res.encoding;
+    this.currentHasBOM = Boolean(res.hasBOM);
+    this.currentLineEnding = res.lineEnding;
+    this.currentMtime = res.mtime;
+    this.currentHash = res.hash;
+    this.isModified = false;
+    this.editor.setValue(res.content, [0, 0]);
+    this.editor.rebuildLineStarts();
+    this.editor.updateGutter();
+    this.editor.history.init(res.content);
+    this.clearAutoSaveDraft(this.currentFilePath);
+    this.hideDraftBanner();
+    this.renderPreview();
+    this.updateTitleAndStatus();
+    this.showToast('已重新载入磁盘最新版本', 'info');
+  }
+
+  async saveFile(options = {}) {
     if (!this.currentFilePath) {
       return this.saveAs();
     }
     const contentToSave = this.editor.textarea.value;
+    const saveSpan = this.saveBtn.querySelector('span');
+    if (saveSpan) saveSpan.textContent = '保存中…';
+
+    const writeOptions = Object.assign({
+      expectedMtime: this.currentMtime,
+      expectedHash: this.currentHash,
+      forceOverwrite: Boolean(options.forceOverwrite)
+    }, options);
+
     const res = await window.mowinAPI.writeFile(
       this.currentFilePath,
       contentToSave,
       this.currentEncoding,
       this.currentLineEnding,
-      this.currentHasBOM
+      this.currentHasBOM,
+      writeOptions
     );
+
+    // 1. 外部冲突处理
+    if (res.conflict) {
+      if (saveSpan) saveSpan.textContent = '保存';
+      const fileName = window.mowinAPI.path.basename(this.currentFilePath);
+      const choice = await window.mowinAPI.confirmConflictDialog(fileName, res.diskMtime);
+      if (choice === 'overwrite') {
+        return await this.saveFile({ forceOverwrite: true });
+      } else if (choice === 'reload') {
+        await this.reloadFromDisk();
+        return false;
+      } else if (choice === 'save-as') {
+        return await this.saveAs();
+      } else {
+        return false;
+      }
+    }
+
     if (res.success) {
-      // 消除竞态条件：仅当当前编辑器内容与刚刚落盘内容一致时才标记已保存
-      if (this.editor.textarea.value === contentToSave) {
-        this.isModified = false;
+      this.currentMtime = res.mtime;
+      this.currentHash = res.hash;
+
+      // 2. 竞态消除：保存期间用户是否有新编辑
+      if (this.editor.textarea.value !== contentToSave) {
+        this.isModified = true;
         this.updateTitleAndStatus();
+        if (saveSpan) {
+          saveSpan.textContent = '有新编辑';
+          setTimeout(() => { if (saveSpan.textContent === '有新编辑') saveSpan.textContent = '保存'; }, 2000);
+        }
+        this.showToast('已安全写入先前快照，但检测到新输入内容尚未落盘', 'warning');
+        return false; // 明确返回 false，告知调用方最新内容未完全保存
       }
 
-      // 保存成功视觉反馈
-      const saveSpan = this.saveBtn.querySelector('span');
+      // 3. 全部内容落盘成功
+      this.isModified = false;
+      this.updateTitleAndStatus();
+      this.clearAutoSaveDraft(this.currentFilePath);
+      this.hideDraftBanner();
+
       if (saveSpan) {
         saveSpan.textContent = '已保存 ✓';
-        setTimeout(() => { saveSpan.textContent = '保存'; }, 1500);
+        setTimeout(() => { if (saveSpan.textContent === '已保存 ✓') saveSpan.textContent = '保存'; }, 1500);
       }
+      this.showToast('已成功保存至磁盘 ✓', 'success');
       return true;
     } else {
-      alert('保存失败: ' + res.error);
+      if (saveSpan) saveSpan.textContent = '保存';
+      this.showToast('保存失败: ' + res.error, 'error');
       return false;
     }
   }
@@ -730,13 +823,25 @@ class AppController {
     if (!filePath) return false;
 
     const prevPath = this.currentFilePath;
+    const prevMtime = this.currentMtime;
+    const prevHash = this.currentHash;
+
     this.currentFilePath = filePath;
-    const saved = await this.saveFile();
+    this.currentMtime = null; // 新目标文件
+    this.currentHash = null;
+
+    const saved = await this.saveFile({ forceOverwrite: true });
     if (saved) {
-      await this.renderPreview(); // 刷新基准目录以加载相对路径图片
+      await this.renderPreview();
       return true;
     } else {
-      this.currentFilePath = prevPath; // 保存失败时回滚路径
+      if (this.editor.textarea.value === this.editor.textarea.value && !this.isModified) {
+        // 保存成功但路径已更新
+        return true;
+      }
+      this.currentFilePath = prevPath;
+      this.currentMtime = prevMtime;
+      this.currentHash = prevHash;
       return false;
     }
   }
@@ -749,12 +854,16 @@ class AppController {
     const prevPath = this.currentFilePath;
     const prevEncoding = this.currentEncoding;
     const prevBOM = this.currentHasBOM;
+    const prevMtime = this.currentMtime;
+    const prevHash = this.currentHash;
 
     this.currentFilePath = filePath;
     this.currentEncoding = 'utf8';
     this.currentHasBOM = false;
+    this.currentMtime = null;
+    this.currentHash = null;
 
-    const saved = await this.saveFile();
+    const saved = await this.saveFile({ forceOverwrite: true });
     if (saved) {
       await this.renderPreview();
       return true;
@@ -762,6 +871,8 @@ class AppController {
       this.currentFilePath = prevPath;
       this.currentEncoding = prevEncoding;
       this.currentHasBOM = prevBOM;
+      this.currentMtime = prevMtime;
+      this.currentHash = prevHash;
       return false;
     }
   }
@@ -772,7 +883,7 @@ class AppController {
       const confirmed = confirm('当前文档包含未保存的修改，确定要放弃所有更改并恢复到上次保存的版本吗？');
       if (!confirmed) return;
     }
-    await this.openDocumentPath(this.currentFilePath);
+    await this.reloadFromDisk();
   }
 
   async exportHTML() {
@@ -867,7 +978,10 @@ class AppController {
       if (decision === 'cancel') return;
       if (decision === 'save') {
         const saved = await this.saveFile();
-        if (!saved) return;
+        if (!saved || this.isModified) {
+          this.showToast('保存期间检测到新编辑内容，打开示例已暂停以保护数据', 'warning');
+          return;
+        }
       }
     }
 
@@ -996,6 +1110,160 @@ $$
     const stateStr = this.isModified ? '修改待保存' : '已保存';
 
     this.statusBar.textContent = `${charCount} 字符 (约 ${readMinutes} 分钟阅读)   ·   ${totalLines} 行   ·   第 ${line} 行   ·   ${encStr} / ${endingStr}   ·   ${stateStr}`;
+  }
+
+  initToast() {
+    let toast = document.getElementById('mowin-action-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'mowin-action-toast';
+      document.body.appendChild(toast);
+    }
+    this.toastEl = toast;
+  }
+
+  showToast(message, type = 'info', duration = 2200) {
+    if (!this.toastEl) this.initToast();
+    this.toastEl.className = 'show';
+    if (type === 'success') this.toastEl.classList.add('toast-success');
+    else if (type === 'warning') this.toastEl.classList.add('toast-warning');
+    else if (type === 'error') this.toastEl.classList.add('toast-error');
+    this.toastEl.textContent = message;
+
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      if (this.toastEl) this.toastEl.className = '';
+    }, duration);
+  }
+
+  initDraftBanner() {
+    let banner = document.getElementById('draft-recovery-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'draft-recovery-banner';
+      banner.style.display = 'none';
+      banner.innerHTML = `
+        <span class="draft-banner-text"></span>
+        <div class="draft-banner-actions">
+          <button class="draft-banner-btn primary" id="btn-restore-draft">恢复草稿</button>
+          <button class="draft-banner-btn" id="btn-discard-draft">丢弃草稿</button>
+        </div>
+      `;
+      const workspace = document.getElementById('main-workspace');
+      if (workspace && workspace.parentNode) {
+        workspace.parentNode.insertBefore(banner, workspace);
+      } else {
+        document.body.prepend(banner);
+      }
+    }
+    this.draftBanner = banner;
+    document.getElementById('btn-restore-draft').addEventListener('click', () => this.restoreDraft());
+    document.getElementById('btn-discard-draft').addEventListener('click', () => {
+      this.clearAutoSaveDraft(this.currentFilePath);
+      this.hideDraftBanner();
+      this.showToast('已放弃本地草稿', 'info');
+    });
+  }
+
+  hideDraftBanner() {
+    if (this.draftBanner) {
+      this.draftBanner.style.display = 'none';
+    }
+    this.pendingDraft = null;
+  }
+
+  getDraftKey(filePath) {
+    return 'mowin_draft_' + (filePath ? window.mowinAPI.path.resolve(filePath).toLowerCase() : '__untitled__');
+  }
+
+  scheduleAutoSaveDraft() {
+    if (this.draftTimer) clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (!this.isModified) return;
+      const content = this.editor.textarea.value;
+      if (!content) return;
+      try {
+        const key = this.getDraftKey(this.currentFilePath);
+        const data = {
+          filePath: this.currentFilePath,
+          content: content,
+          timestamp: Date.now(),
+          encoding: this.currentEncoding,
+          lineEnding: this.currentLineEnding,
+          hasBOM: this.currentHasBOM
+        };
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch (e) {}
+    }, 1200);
+  }
+
+  clearAutoSaveDraft(filePath) {
+    try {
+      const key = this.getDraftKey(filePath !== undefined ? filePath : this.currentFilePath);
+      localStorage.removeItem(key);
+    } catch (e) {}
+  }
+
+  checkDraftRecovery(filePath) {
+    try {
+      const key = this.getDraftKey(filePath);
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        this.hideDraftBanner();
+        return;
+      }
+      const draft = JSON.parse(raw);
+      if (!draft || !draft.content) {
+        this.hideDraftBanner();
+        return;
+      }
+      // 如果草稿内容与当前编辑器完全一致，无需提示
+      if (draft.content === this.editor.textarea.value) {
+        this.hideDraftBanner();
+        return;
+      }
+
+      this.pendingDraft = draft;
+      const timeStr = new Date(draft.timestamp).toLocaleTimeString();
+      const textSpan = this.draftBanner.querySelector('.draft-banner-text');
+      if (textSpan) {
+        textSpan.textContent = `📋 检测到上次未保存的本地恢复草稿 (${timeStr})，内容较磁盘版本更新`;
+      }
+      this.draftBanner.style.display = 'flex';
+    } catch (e) {
+      this.hideDraftBanner();
+    }
+  }
+
+  restoreDraft() {
+    if (!this.pendingDraft) return;
+    this.editor.setValue(this.pendingDraft.content, [0, 0]);
+    this.editor.rebuildLineStarts();
+    this.editor.updateGutter();
+    this.isModified = true;
+    this.renderPreview();
+    this.updateTitleAndStatus();
+    this.hideDraftBanner();
+    this.showToast('已成功恢复未保存草稿', 'success');
+  }
+
+  async checkExternalChangeOnFocus() {
+    if (!this.currentFilePath) return;
+    const now = Date.now();
+    if (this._lastFocusCheck && (now - this._lastFocusCheck < 1500)) return;
+    this._lastFocusCheck = now;
+
+    try {
+      const res = await window.mowinAPI.checkFileConflict(this.currentFilePath, this.currentMtime, this.currentHash);
+      if (res && res.conflict) {
+        if (!this.isModified) {
+          await this.reloadFromDisk();
+          this.showToast('检测到外部修改，已自动重新载入最新文件', 'info');
+        } else {
+          this.showToast('⚠️ 文件在外部已被修改，保存时将提供合并或覆盖选项', 'warning', 4000);
+        }
+      }
+    } catch (e) {}
   }
 }
 

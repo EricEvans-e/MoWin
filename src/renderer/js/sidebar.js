@@ -9,6 +9,7 @@ class SidebarController {
     this.currentTab = 'outline'; // 'outline' | 'files'
     this.currentFolder = null;
     this.filesList = [];
+    this.expandedFolders = new Set();
 
     this.initElements();
   }
@@ -174,23 +175,97 @@ class SidebarController {
       return;
     }
 
+    const tree = this.buildTree(this.currentFolder, list);
     const currentDoc = this.app.currentFilePath;
-    list.forEach(filePath => {
+
+    // 当前有活动文档时，自动展开其父级目录
+    if (currentDoc) {
+      const relDoc = window.mowinAPI.path.relative(this.currentFolder, currentDoc).replace(/\\/g, '/');
+      const parts = relDoc.split('/');
+      let acc = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        acc = acc ? (acc + '/' + parts[i]) : parts[i];
+        this.expandedFolders.add(acc);
+      }
+    }
+
+    this.renderTreeNode(tree, 0, Boolean(this.fileFilterQuery));
+  }
+
+  buildTree(baseFolder, filePaths) {
+    const root = { isDir: true, name: '', relPath: '', subdirs: new Map(), files: [] };
+    filePaths.forEach(filePath => {
+      const rel = window.mowinAPI.path.relative(baseFolder, filePath);
+      const parts = rel.replace(/\\/g, '/').split('/').filter(Boolean);
+      let curr = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        const relDir = parts.slice(0, i + 1).join('/');
+        if (!curr.subdirs.has(part)) {
+          curr.subdirs.set(part, { isDir: true, name: part, relPath: relDir, subdirs: new Map(), files: [] });
+        }
+        curr = curr.subdirs.get(part);
+      }
+      const fileName = parts[parts.length - 1];
+      curr.files.push({ name: fileName, fullPath: filePath, relPath: rel });
+    });
+    return root;
+  }
+
+  renderTreeNode(node, depth, forceExpandAll) {
+    const currentDoc = this.app.currentFilePath;
+
+    // 1. 渲染子目录
+    const sortedSubdirs = Array.from(node.subdirs.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    sortedSubdirs.forEach(subdir => {
+      const folderKey = subdir.relPath;
+      const isExpanded = forceExpandAll || this.expandedFolders.has(folderKey);
+
+      const folderEl = document.createElement('div');
+      folderEl.className = 'folder-item' + (isExpanded ? ' expanded' : '');
+      folderEl.style.paddingLeft = `${8 + depth * 12}px`;
+      folderEl.innerHTML = `
+        <span class="folder-arrow">${isExpanded ? '▼' : '▶'}</span>
+        <span class="folder-icon">${isExpanded ? '📂' : '📁'}</span>
+        <span class="folder-name">${subdir.name}</span>
+      `;
+      folderEl.title = subdir.relPath;
+      folderEl.setAttribute('role', 'button');
+      folderEl.setAttribute('tabindex', '0');
+
+      folderEl.addEventListener('click', () => {
+        if (this.expandedFolders.has(folderKey)) {
+          this.expandedFolders.delete(folderKey);
+        } else {
+          this.expandedFolders.add(folderKey);
+        }
+        this.renderFiles();
+      });
+
+      this.contentEl.appendChild(folderEl);
+
+      if (isExpanded) {
+        this.renderTreeNode(subdir, depth + 1, forceExpandAll);
+      }
+    });
+
+    // 2. 渲染当前目录下的文件
+    const sortedFiles = node.files.slice().sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    sortedFiles.forEach(file => {
       const item = document.createElement('div');
       item.className = 'file-item';
-      if (currentDoc && (currentDoc === filePath || window.mowinAPI.path.resolve(currentDoc) === window.mowinAPI.path.resolve(filePath))) {
+      item.style.paddingLeft = `${16 + depth * 12}px`;
+      if (currentDoc && (currentDoc === file.fullPath || window.mowinAPI.path.resolve(currentDoc) === window.mowinAPI.path.resolve(file.fullPath))) {
         item.classList.add('active');
       }
-      const relPath = window.mowinAPI.path.relative(this.currentFolder, filePath);
-      item.textContent = relPath;
-      item.title = filePath;
-
+      item.innerHTML = `<span style="font-size:12px;opacity:0.75;">📄</span><span>${file.name}</span>`;
+      item.title = file.fullPath;
       item.setAttribute('role', 'button');
       item.setAttribute('tabindex', '0');
 
       const selectFile = () => {
-        this.app.openDocumentPath(filePath);
-        this.highlightActiveFile(filePath);
+        this.app.openDocumentPath(file.fullPath);
+        this.highlightActiveFile(file.fullPath);
       };
 
       item.addEventListener('click', selectFile);

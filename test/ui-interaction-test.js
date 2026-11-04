@@ -1,6 +1,16 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+let electron = require('electron');
+if (typeof electron === 'string') {
+  const { spawn } = require('child_process');
+  const child = spawn(electron, [__filename, ...process.argv.slice(2)], { stdio: 'inherit' });
+  child.on('close', (code) => process.exit(code || 0));
+  return;
+}
+const { app, BrowserWindow, ipcMain } = electron;
 const path = require('path');
 const fs = require('fs');
+
+ipcMain.handle('app:confirm-conflict-dialog', () => 'overwrite');
+ipcMain.handle('app:check-file-conflict', () => ({ conflict: false }));
 
 ipcMain.handle('app:get-initial-file', () => null);
 ipcMain.handle('app:set-title', () => {});

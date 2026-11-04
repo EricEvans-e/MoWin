@@ -1,4 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+let electron = require('electron');
+if (typeof electron === 'string') {
+  const { spawn } = require('child_process');
+  const child = spawn(electron, [__filename, ...process.argv.slice(2)], { stdio: 'inherit' });
+  child.on('close', (code) => process.exit(code || 0));
+  return;
+}
+const { app, BrowserWindow, ipcMain } = electron;
 const path = require('path');
 const fs = require('fs');
 const assert = require('assert');
@@ -28,6 +35,8 @@ ipcMain.handle('app:print-to-pdf', async (e, opts) => {
   printToPdfReceivedOptions = opts;
   return true;
 });
+ipcMain.handle('app:confirm-conflict-dialog', () => 'overwrite');
+ipcMain.handle('app:check-file-conflict', () => ({ conflict: false }));
 ipcMain.handle('app:print', () => true);
 ipcMain.handle('app:new-window', () => true);
 ipcMain.handle('app:open-external', () => true);
@@ -44,15 +53,48 @@ app.whenReady().then(async () => {
     }
   });
 
+  win.webContents.on('console-message', (e, level, message) => {
+    console.log('[RENDERER CONSOLE]:', message);
+  });
+
   await win.loadFile(path.join(__dirname, '../src/renderer/index.html'));
-  await new Promise(r => setTimeout(r, 600));
+
+  // 稳健等待渲染层完全初始化完毕
+  await win.webContents.executeJavaScript(`
+    new Promise(resolve => {
+      const check = () => {
+        if (window.mowinApp && window.mowinApp.editor) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+  `);
+
+  const sampleMd = `# 技术架构方案
+
+这是一段引言文字。
+
+\`\`\`javascript
+function calculateSum(a, b) {
+  return a + b;
+}
+\`\`\`
+
+> 关键架构约束说明
+
+| 模块 | 协议 |
+| --- | --- |
+| 网关 | HTTP/2 |
+
+$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
+`;
 
   // 1. 设置暗黑主题、放大屏幕预览到 150%、录入包含公式、代码块、表格、引用的 Markdown
   await win.webContents.executeJavaScript(`
     window.mowinApp.setTheme('dark');
     window.mowinApp.scale.setPreviewScale(150);
     window.mowinApp.currentFilePath = 'E:/docs/技术架构方案.md';
-    window.mowinApp.editor.setValue('# 技术架构方案\\n\\n这是一段引言文字。\\n\\n\`\`\`javascript\\nfunction calculateSum(a, b) {\\n  return a + b;\\n}\\n\`\`\`\\n\\n> 关键架构约束说明\\n\\n| 模块 | 协议 |\\n| --- | --- |\\n| 网关 | HTTP/2 |\\n\\n$$x = \\\\frac{-b \\\\pm \\\\sqrt{b^2 - 4ac}}{2a}$$\\n', [0, 0]);
+    window.mowinApp.editor.setValue(${JSON.stringify(sampleMd)}, [0, 0]);
     window.mowinApp.renderPreview();
   `);
   await new Promise(r => setTimeout(r, 500));

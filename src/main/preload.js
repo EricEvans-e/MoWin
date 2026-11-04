@@ -53,8 +53,10 @@ contextBridge.exposeInMainWorld('mowinAPI', {
   saveFileDialog: (defaultName) => ipcRenderer.invoke('app:save-file-dialog', defaultName),
   chooseFolderDialog: () => ipcRenderer.invoke('app:choose-folder-dialog'),
   confirmSaveDialog: (fileName) => ipcRenderer.invoke('app:confirm-save-dialog', fileName),
+  confirmConflictDialog: (fileName, diskMtime) => ipcRenderer.invoke('app:confirm-conflict-dialog', fileName, diskMtime),
+  checkFileConflict: (filePath, expectedMtime, expectedHash) => ipcRenderer.invoke('app:check-file-conflict', filePath, expectedMtime, expectedHash),
   readFile: (filePath) => ipcRenderer.invoke('app:read-file', filePath),
-  writeFile: (filePath, content, encoding, lineEnding, hasBOM) => ipcRenderer.invoke('app:write-file', filePath, content, encoding, lineEnding, hasBOM),
+  writeFile: (filePath, content, encoding, lineEnding, hasBOM, options) => ipcRenderer.invoke('app:write-file', filePath, content, encoding, lineEnding, hasBOM, options),
   listFiles: (folderPath) => ipcRenderer.invoke('app:list-files', folderPath),
   
   // 导出与打印

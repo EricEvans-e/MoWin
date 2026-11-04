@@ -1,4 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+let electron = require('electron');
+if (typeof electron === 'string') {
+  const { spawn } = require('child_process');
+  const child = spawn(electron, [__filename, ...process.argv.slice(2)], { stdio: 'inherit' });
+  child.on('close', (code) => process.exit(code || 0));
+  return;
+}
+const { app, BrowserWindow, ipcMain } = electron;
 const path = require('path');
 const assert = require('assert');
 
@@ -8,6 +15,8 @@ ipcMain.handle('app:set-dirty-state', () => {});
 ipcMain.handle('app:clear-window-file', () => true);
 ipcMain.handle('app:open-file-dialog', () => null);
 ipcMain.handle('app:open-image-dialog', () => 'C:/images/test.png');
+ipcMain.handle('app:confirm-conflict-dialog', () => 'overwrite');
+ipcMain.handle('app:check-file-conflict', () => ({ conflict: false }));
 ipcMain.handle('app:save-file-dialog', () => 'C:/tmp/saved.md');
 ipcMain.handle('app:choose-folder-dialog', () => null);
 ipcMain.handle('app:read-file', (e, p) => ({

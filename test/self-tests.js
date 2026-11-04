@@ -12,7 +12,7 @@ const Markdown = require('../src/common/markdown');
 const LaTeX = require('../src/common/latex');
 const Formatting = require('../src/common/formatting');
 const ImagePaths = require('../src/common/image-paths');
-const { detectAndReadFile, saveFileWithFormat } = require('../src/common/file-io');
+const { detectAndReadFile, saveFileWithFormat, checkFileConflict, safeAtomicWrite } = require('../src/common/file-io');
 
 let passedCount = 0;
 let totalCount = 0;
@@ -284,6 +284,83 @@ function runTests() {
       readUtf16BE.content === utf16BEContent && readUtf16BE.encoding === 'utf16be' && readUtf16BE.hasBOM,
       '真实磁盘 UTF-16BE 写入与读取保留 BOM 与文本完整性'
     );
+
+    // 7. 原子替换安全回滚机制测试（杜绝删除原文件风险）
+    const safeTargetFile = path.join(encTempDir, 'original.md');
+    const originalContent = '# 极其珍贵不可丢失的原始文档\n绝不能被删除！';
+    fs.writeFileSync(safeTargetFile, originalContent, 'utf8');
+
+    // 模拟场景 A：首次 rename 抛错，但备份迁移成功完成替换
+    let firstRenameFailed = false;
+    const mockFs1 = Object.assign({}, fs, {
+      renameSync(src, dst) {
+        if (!firstRenameFailed && dst === safeTargetFile) {
+          firstRenameFailed = true;
+          const err = new Error('EBUSY: resource locked');
+          err.code = 'EBUSY';
+          throw err;
+        }
+        return fs.renameSync(src, dst);
+      }
+    });
+
+    const newContent = '# 成功更新的内容';
+    saveFileWithFormat(safeTargetFile, newContent, 'utf8', '\n', false, { fs: mockFs1 });
+    check(
+      fs.readFileSync(safeTargetFile, 'utf8') === newContent,
+      '原子替换在首次直接 rename 异常时，通过安全备份机制成功更新且不丢失原件'
+    );
+
+    // 模拟场景 B：写入新文件阶段发生致命异常，必须百分之百回滚恢复原文件
+    fs.writeFileSync(safeTargetFile, originalContent, 'utf8');
+    let directRenameAttempted = false;
+    let secondRenameFailed = false;
+    const mockFs2 = Object.assign({}, fs, {
+      renameSync(src, dst) {
+        // 1. 第一次尝试直接原子替换时失败
+        if (dst === safeTargetFile && !directRenameAttempted) {
+          directRenameAttempted = true;
+          throw new Error('EBUSY: resource locked on direct rename');
+        }
+        // 2. 第二次尝试将 tmpPath 替换为 safeTargetFile 时再次失败
+        if (dst === safeTargetFile && directRenameAttempted && !secondRenameFailed) {
+          secondRenameFailed = true;
+          throw new Error('EPERM: disk error on second rename');
+        }
+        // 3. 其余操作（原件移到 bakPath、以及 bakPath 回滚回 safeTargetFile）正常执行
+        return fs.renameSync(src, dst);
+      }
+    });
+
+    let catchedError = null;
+    try {
+      saveFileWithFormat(safeTargetFile, '# 失败的尝试', 'utf8', '\n', false, { fs: mockFs2 });
+    } catch (e) {
+      catchedError = e;
+    }
+
+    const contentAfterRollback = fs.readFileSync(safeTargetFile, 'utf8');
+    const residualTmpFiles = fs.readdirSync(encTempDir).filter(f => f.startsWith('.~mowin-tmp-') || f.startsWith('.~mowin-bak-'));
+    check(
+      catchedError !== null && contentAfterRollback === originalContent && residualTmpFiles.length === 0,
+      '原子替换在发生严重异常时安全回滚原文件、原文档字节完好且清理所有临时文件'
+    );
+
+    // 8. 外部修改冲突检测机制测试
+    const conflictFile = path.join(encTempDir, 'conflict-test.md');
+    fs.writeFileSync(conflictFile, '# 初始内容\n版本 1', 'utf8');
+    const initialMeta = detectAndReadFile(conflictFile);
+
+    // 外部未修改：不报冲突
+    const noConflict = checkFileConflict(conflictFile, initialMeta.mtime, initialMeta.hash);
+    check(!noConflict.conflict, '文件未被外部修改时，冲突检测为无冲突');
+
+    // 外部修改内容并更新 mtime：精确报冲突
+    const pastTime = new Date(Date.now() + 2000);
+    fs.writeFileSync(conflictFile, '# 外部工具修改后的内容\n版本 2', 'utf8');
+    fs.utimesSync(conflictFile, pastTime, pastTime);
+    const hasConflict = checkFileConflict(conflictFile, initialMeta.mtime, initialMeta.hash);
+    check(hasConflict.conflict === true && hasConflict.diskMtime > initialMeta.mtime, '外部修改文件内容后，保存前精准检测出冲突并阻断静默覆盖');
   } finally {
     fs.rmSync(encTempDir, { recursive: true, force: true });
   }

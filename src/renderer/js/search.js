@@ -91,12 +91,24 @@ class SearchController {
       return;
     }
 
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    let pos = 0;
-    while ((pos = lowerText.indexOf(lowerQuery, pos)) !== -1) {
-      this.matches.push({ start: pos, end: pos + query.length });
-      pos += query.length;
+    // 采用带 u 标志的 Unicode 不区分大小写正则在原文本上直接提取偏移，
+    // 杜绝全局 toLowerCase() 转换改变特殊字符（如 Turkish İ、德语 ß 等）长度导致的索引偏移与错位
+    try {
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'giu');
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        this.matches.push({ start: match.index, end: match.index + match[0].length });
+        if (match[0].length === 0) {
+          regex.lastIndex++;
+        }
+      }
+    } catch (e) {
+      let pos = 0;
+      while ((pos = text.indexOf(query, pos)) !== -1) {
+        this.matches.push({ start: pos, end: pos + query.length });
+        pos += query.length || 1;
+      }
     }
 
     if (this.matches.length > 0) {
@@ -160,7 +172,13 @@ class SearchController {
     if (!query) return;
     const replacement = this.replaceInput.value;
     const text = this.app.editor.textarea.value;
-    const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    let regex;
+    try {
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      regex = new RegExp(escaped, 'giu');
+    } catch (e) {
+      regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    }
     // 使用函数返回值进行纯字面量替换，避免 $&, $1 等符号被错误解释为正则替换模板
     const newText = text.replace(regex, () => replacement);
     if (newText === text) return;
